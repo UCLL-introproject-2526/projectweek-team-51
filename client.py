@@ -10,9 +10,9 @@ import pygame
 
 
 # DEFAULT_SERVER_HOST = "127.0.0.1"
-DEFAULT_SERVER_HOST = "tunel-sdrfyidxk.volodymyr-corporation.com"
+DEFAULT_SERVER_HOST = "game.volodymyr-corporation.com"
 
-DEFAULT_SERVER_PORT = 8001
+DEFAULT_SERVER_PORT = 9001
 NETWORK_SEND_NEWLINE = "\n"
 
 # Visuals
