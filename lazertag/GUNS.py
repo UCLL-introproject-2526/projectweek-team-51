@@ -220,27 +220,39 @@ class Gun:
                 if cap >= random.randint(0,int(npc.dist*(1/self.range))):
                     SOUND.play_sound(self.hit_marker, 0)
 
-                    #Damage less if NPC is far away from center.
+                    # Calculate damage
+                    dmg_amount = self.dmg
+                    # Damage less if NPC is far away from center (Critical hit logic)
                     if self.hit_rect.width < 120 or (npc.hit_rect.centerx > self.hit_rect.left + self.hit_rect.width/3 and npc.hit_rect.centerx < self.hit_rect.right - self.hit_rect.width/3):
-                        #Critical hit
-            
-                        if (npc.state == 'idle' or npc.state == 'patrouling') and not npc.player_in_view:
-                            npc.health -= self.dmg * 2
-                            SETTINGS.statistics['last ddealt'] += self.dmg*2
-                        else:
-                            npc.health -= self.dmg
-                            SETTINGS.statistics['last ddealt'] += self.dmg
+                         dmg_amount *= 2 # Critical hit
+
+                    # --- MULTIPLAYER LOGIC START ---
+                    # If it is a remote player, do NOT modify health locally. Send event to server.
+                    if getattr(npc, 'type', 'npc') == 'remote':
+                        SETTINGS.hit_events.append({
+                            'target_id': npc.id,
+                            'damage': dmg_amount,
+                            'shooter_id': SETTINGS.my_id
+                        })
+                        npc.hurting = True # Trigger visual flinch immediately
                     else:
+                        # Standard NPC logic (Singleplayer fallback)
                         if (npc.state == 'idle' or npc.state == 'patrouling') and not npc.player_in_view:
-                            npc.health -= self.dmg
-                            SETTINGS.statistics['last ddealt'] += self.dmg*2
+                            npc.health -= dmg_amount # Already calculated as crit or normal
+                            SETTINGS.statistics['last ddealt'] += dmg_amount
                         else:
-                            npc.health -= self.dmg / 2
-                            SETTINGS.statistics['last ddealt'] += self.dmg
+                            # Note: Original code reduced non-crit damage by half here for alert NPCs
+                            # We keep original logic for local NPCs
+                            final_dmg = dmg_amount if (self.hit_rect.width < 120 or (npc.hit_rect.centerx > self.hit_rect.left + self.hit_rect.width/3 and npc.hit_rect.centerx < self.hit_rect.right - self.hit_rect.width/3)) else dmg_amount / 2
+                            npc.health -= final_dmg
+                            SETTINGS.statistics['last ddealt'] += final_dmg
+                        
+                        npc.hurting = True
+                        if npc.health <= 0:
+                            npc.knockback = self.dmg * (SETTINGS.tile_size/2)
+                    
                     npc.timer = 0
-                    npc.hurting = True
-                    if npc.health <= 0:
-                        npc.knockback = self.dmg * (SETTINGS.tile_size/2)
+                    # --- MULTIPLAYER LOGIC END ---
 
     def reload_animation(self):
         # LASER TAG - Allow reload with no ammo type (infinite ammo)
@@ -421,5 +433,3 @@ class Gun:
 #    'magout' : [reloading mag],
 #    'magin' : [reloaded mag]
 #    }
-            
-

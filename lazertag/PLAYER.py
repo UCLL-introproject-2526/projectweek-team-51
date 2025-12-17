@@ -1,5 +1,6 @@
  #This is the player script. This is where the movement and collision detection of the player is.
-
+import SPRITES
+import random
 import SETTINGS
 import EFFECTS
 import INVENTORY
@@ -325,7 +326,136 @@ class Player:
         canvas.blit(self.sprite, (self.rect.x/4, self.rect.y/4))
         pygame.draw.line(canvas, self.color, (self.rect.center[0]/4, self.rect.center[1]/4), (p1/4, p2/4))
 
+class RemotePlayer:
+    def __init__(self, id, team):
+        self.id = id
+        self.team = team
+        self.type = 'remote' # Identifier for GUNS.py checks
+        self.solid = True
+        self.dead = False
         
+        # Position & State
+        self.real_x = 0
+        self.real_y = 0
+        self.angle = 0
+        self.rect = pygame.Rect(0, 0, SETTINGS.tile_size/3, SETTINGS.tile_size/3)
+        self.health = 100
+        self.keys = {'w':False, 'a':False, 's':False, 'd':False}
+        self.is_shooting = False
+        self.weapon = "None"
+        
+        # Visual Setup (Team Colors)
+        if self.team == 'green':
+            tex_path = os.path.join('graphics', 'npc', 'green_team_player.png')
+        else:
+            tex_path = os.path.join('graphics', 'npc', 'orange_team_player.png')
+            
+        self.texture = pygame.image.load(tex_path).convert_alpha()
+        
+        # Slice Spritesheet (Adapted from NPC.py)
+        # Row 0: Stand, Row 1-8: Walk directions, Row 9: Die, Row 10: Hit
+        self.stand_texture = [self.texture.subsurface(x*64, 0, 64, 128).convert_alpha() for x in range(8)]
+        self.front_texture = [self.texture.subsurface(x*64, 128, 64, 128).convert_alpha() for x in range(10)]
+        self.frontright_texture = [self.texture.subsurface(x*64, 256, 64, 128).convert_alpha() for x in range(10)]
+        self.right_texture = [self.texture.subsurface(x*64, 384, 64, 128).convert_alpha() for x in range(10)]
+        self.backright_texture = [self.texture.subsurface(x*64, 512, 64, 128).convert_alpha() for x in range(10)]
+        self.back_texture = [self.texture.subsurface(x*64, 640, 64, 128).convert_alpha() for x in range(10)]
+        
+        # Mirror textures for left side
+        self.backleft_texture = [pygame.transform.flip(img, True, False) for img in self.backright_texture]
+        self.left_texture = [pygame.transform.flip(img, True, False) for img in self.right_texture]
+        self.frontleft_texture = [pygame.transform.flip(img, True, False) for img in self.frontright_texture]
+        
+        self.die_texture = [self.texture.subsurface(x*64, 768, 64, 128).convert_alpha() for x in range(11)]
+        self.hit_texture = [self.texture.subsurface(x*64, 896, 64, 128).convert_alpha() for x in range(6)]
+
+        # Animation State
+        self.current_frame = 0
+        self.timer = 0
+        self.frame_interval = 0.1
+        self.moving = False
+        self.hurting = False
+        
+        # Initialize Sprite for Raycaster
+        self.sprite = SPRITES.Sprite(self.stand_texture[0], self.id, [0,0], 'npc', self)
+        SETTINGS.all_sprites.append(self.sprite)
+
+    def update(self, data):
+        """Update state from server data"""
+        self.real_x = data['x']
+        self.real_y = data['y']
+        self.angle = data['angle']
+        self.keys = data['keys']
+        self.health = data['health']
+        self.is_shooting = data['is_shooting']
+        
+        # Position updates
+        self.rect.x = self.real_x
+        self.rect.y = self.real_y
+        self.rect.center = (self.real_x + SETTINGS.tile_size/2, self.real_y + SETTINGS.tile_size/2)
+        
+        # Determine movement state for animation
+        self.moving = any(self.keys.values())
+        
+        if self.health <= 0:
+            self.dead = True
+            self.solid = False
+
+    def think(self):
+        """Called every frame to calculate 2.5D visual projection"""
+        if self.dead and self.current_frame >= len(self.die_texture)-1:
+            return
+
+        # Calculate distance to local player (Critical for Z-Buffer)
+        xpos = SETTINGS.player_rect.centerx - self.rect.centerx
+        ypos = SETTINGS.player_rect.centery - self.rect.centery
+        self.dist = math.sqrt(xpos*xpos + ypos*ypos)
+        
+        self.timer += SETTINGS.dt
+
+        # Visual Logic: Determine sprite face based on relative angle
+        if self.dist <= SETTINGS.render * SETTINGS.tile_size:
+            theta = math.atan2(-ypos, xpos) % (2*math.pi)
+            theta = math.degrees(theta)
+            theta -= self.angle # Offset by player's facing direction
+            if theta < 0: theta += 360
+            elif theta > 360: theta -= 360
+            
+            self.sprite.update_pos([self.rect.x, self.rect.y])
+            
+            # Select Animation Set
+            if self.dead:
+                anim_set = self.die_texture
+                loop = False
+            elif self.is_shooting:
+                anim_set = self.hit_texture # Reuse hit texture for shooting flash
+                loop = True
+            elif self.moving:
+                # Directional Walking
+                if theta <= 22.5 or theta >= 337.5:     anim_set = self.front_texture
+                elif theta <= 67.5:                     anim_set = self.frontleft_texture
+                elif theta <= 112.5:                    anim_set = self.left_texture
+                elif theta <= 157.5:                    anim_set = self.backleft_texture
+                elif theta <= 202.5:                    anim_set = self.back_texture
+                elif theta <= 247.5:                    anim_set = self.backright_texture
+                elif theta <= 292.5:                    anim_set = self.right_texture
+                else:                                   anim_set = self.frontright_texture
+                loop = True
+            else:
+                # Idle Standing
+                anim_set = [self.stand_texture[0]] # Just use front facing for idle for now
+                loop = True
+
+            # Advance Animation Frame
+            if self.timer >= self.frame_interval:
+                self.current_frame += 1
+                self.timer = 0
+                if self.current_frame >= len(anim_set):
+                    if loop: self.current_frame = 0
+                    else: self.current_frame = len(anim_set) - 1
+            
+            self.sprite.texture = anim_set[self.current_frame]
+            self.hit_rect = self.rect
         
 
 
