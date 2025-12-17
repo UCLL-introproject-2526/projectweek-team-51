@@ -449,12 +449,9 @@ def spawn_npcs():
         stats['face'] = npc[1]
 
         # Team assignment for laser tag gameplay
-        # Distribute NPCs evenly between teams (alternating pattern)
-        # First half goes to one team, second half to the other
-        if npc_count < total_npcs // 2:
-            assigned_team = 'green'
-        else:
-            assigned_team = 'orange'
+        # TEMPORARY: All NPCs assigned to orange team (player vs all NPCs)
+        # TODO: Restore team balance when implementing multiplayer
+        assigned_team = 'orange'
 
         # Create NPC with team assignment
         SETTINGS.npc_list.append(NPC.Npc(stats, sounds, path.join(*stats['filepath']), team=assigned_team))

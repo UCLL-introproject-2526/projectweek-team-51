@@ -521,6 +521,10 @@ def main_loop():
                     SETTINGS.raylines = []
 
                     for i in SETTINGS.npc_list:
+                        # Skip drawing orange team NPCs on minimap (hide enemy positions)
+                        if i.team == 'orange':
+                            continue
+
                         # Use team colors on minimap for laser tag
                         npc_color = SETTINGS.team_colors.get(i.team, SETTINGS.RED)
                         if i.rect and i.dist <= SETTINGS.render * SETTINGS.tile_size * 1.2:
