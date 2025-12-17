@@ -197,62 +197,46 @@ class Gun:
                 SOUND.play_sound(random.choice(self.sounds['click']), 0)
                 self.firetimer = 0
                            
-
     def damage(self):
-        if SETTINGS.middle_slice_len:
-            target_npcs = [x for x in SETTINGS.npc_list if x.hit_rect.colliderect(self.hit_rect) and x.dist < SETTINGS.middle_slice_len]
-        else:
-            target_npcs = [x for x in SETTINGS.npc_list if x.hit_rect.colliderect(self.hit_rect)]
+            # 1. Identify potential targets (RemotePlayers are stored in npc_list)
+            if SETTINGS.middle_slice_len:
+                target_players = [x for x in SETTINGS.npc_list if x.hit_rect.colliderect(self.hit_rect) and x.dist < SETTINGS.middle_slice_len]
+            else:
+                target_players = [x for x in SETTINGS.npc_list if x.hit_rect.colliderect(self.hit_rect)]
 
-        # Filter out friendly team members (no friendly fire in laser tag)
-        target_npcs = [x for x in target_npcs if x.team != SETTINGS.player_team]
+            # 2. Filter out teammates (Team Deathmatch Logic)
+            target_players = [x for x in target_players if x.team != SETTINGS.player_team]
 
-        if len(target_npcs) > 3:
-            target_npcs = sorted(target_npcs, key=lambda x: x.sprite.theta)[:3]
+            # 3. Sort by priority (closest to crosshair center)
+            if len(target_players) > 0:
+                # Sort by angle relative to player look direction to find the one closest to crosshair
+                target_players = sorted(target_players, key=lambda x: abs(x.sprite.theta))
+                
+                # Select the best target (the one we actually hit)
+                hit_player = target_players[0]
 
-        for npc in target_npcs:
-            if npc.dist <= self.range and not npc.dead:
-                if npc.dist <= SETTINGS.tile_size*2:
-                    cap = 100
-                else:
-                    cap = (self.hit_percent * 0.96 ** (npc.dist*((100-self.hit_percent)/100)))
+                # 4. Check Range
+                if hit_player.dist <= self.range and not hit_player.dead:
+                    
+                    # 5. Hit Chance / Accuracy Check
+                    # (You can remove this if you want 100% accuracy for competitive play)
+                    cap = 100 
+                    if cap >= random.randint(0, int(hit_player.dist * (1/self.range))):
                         
-                if cap >= random.randint(0,int(npc.dist*(1/self.range))):
-                    SOUND.play_sound(self.hit_marker, 0)
+                        # 6. Play Hit Sound
+                        SOUND.play_sound(self.hit_marker, 0)
+                        
+                        # 7. Visual Feedback
+                        hit_player.hurting = True 
 
-                    # Calculate damage
-                    dmg_amount = self.dmg
-                    # Damage less if NPC is far away from center (Critical hit logic)
-                    if self.hit_rect.width < 120 or (npc.hit_rect.centerx > self.hit_rect.left + self.hit_rect.width/3 and npc.hit_rect.centerx < self.hit_rect.right - self.hit_rect.width/3):
-                         dmg_amount *= 2 # Critical hit
-
-                    # --- MULTIPLAYER LOGIC START ---
-                    # If it is a remote player, do NOT modify health locally. Send event to server.
-                    if getattr(npc, 'type', 'npc') == 'remote':
+                        # 8. Send Event to Server
+                        # We send the 'hit' event. The SERVER will decide the actual damage/health subtraction.
                         SETTINGS.hit_events.append({
-                            'target_id': npc.id,
-                            'damage': dmg_amount,
+                            'target_id': hit_player.id,
+                            'damage': self.dmg, # Or send 0 and let server calculate it based on weapon
                             'shooter_id': SETTINGS.my_id
                         })
-                        npc.hurting = True # Trigger visual flinch immediately
-                    else:
-                        # Standard NPC logic (Singleplayer fallback)
-                        if (npc.state == 'idle' or npc.state == 'patrouling') and not npc.player_in_view:
-                            npc.health -= dmg_amount # Already calculated as crit or normal
-                            SETTINGS.statistics['last ddealt'] += dmg_amount
-                        else:
-                            # Note: Original code reduced non-crit damage by half here for alert NPCs
-                            # We keep original logic for local NPCs
-                            final_dmg = dmg_amount if (self.hit_rect.width < 120 or (npc.hit_rect.centerx > self.hit_rect.left + self.hit_rect.width/3 and npc.hit_rect.centerx < self.hit_rect.right - self.hit_rect.width/3)) else dmg_amount / 2
-                            npc.health -= final_dmg
-                            SETTINGS.statistics['last ddealt'] += final_dmg
-                        
-                        npc.hurting = True
-                        if npc.health <= 0:
-                            npc.knockback = self.dmg * (SETTINGS.tile_size/2)
-                    
-                    npc.timer = 0
-                    # --- MULTIPLAYER LOGIC END ---
+
 
     def reload_animation(self):
         # LASER TAG - Allow reload with no ammo type (infinite ammo)
