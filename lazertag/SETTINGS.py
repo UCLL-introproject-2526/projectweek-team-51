@@ -1,5 +1,5 @@
 #Settings for DUGA
-
+import random
 '''Game settings'''
 current_level = 0
 fps = 31
@@ -288,3 +288,9 @@ YELLOW = (255, 255, 0)
 #Overvej at lave justerbare controls
 
 temp = []
+# ... (Keep all existing code) ...
+
+'''Multiplayer Settings'''
+my_id = random.randint(0, 999999)  # Generate a temporary unique ID
+remote_players = {}                # Stores RemotePlayer objects: {id: object}
+hit_events = []                    # Queue for hit events (implemented in next steps)

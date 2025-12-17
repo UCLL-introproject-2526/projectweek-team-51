@@ -1,6 +1,6 @@
 #This is the MAIN script of us. This is where the main loop is located and this is where all resources are loaded.
 #All the classes will be located at the bottom of this script.
-
+import NETWORK
 import pygame
 import math
 import os
@@ -426,58 +426,106 @@ def calculate_statistics():
 def main_loop():
     game_exit = False
     clock = pygame.time.Clock()
-    logging.basicConfig(filename = os.path.join('data', 'CrashReport.log'), level=logging.WARNING)
+    logging.basicConfig(filename=os.path.join('data', 'CrashReport.log'), level=logging.WARNING)
 
-##    allfps = []
-    
+    # --- INITIALIZE NETWORK ---
+    net = NETWORK.Network()
+
     while not game_exit:
         SETTINGS.zbuffer = []
+        # Update Playtime
         if SETTINGS.play_seconds >= 60:
             SETTINGS.statistics['playtime'] += 1
             SETTINGS.play_seconds = 0
         else:
             SETTINGS.play_seconds += SETTINGS.dt
 
-##        allfps.append(clock.get_fps())
-            
+        # Event Handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT or SETTINGS.quit_game:
                 game_exit = True
-
-##                b = 0
-##                for x in allfps:
-##                    b += x
-##                print(b/len(allfps))
-                
                 menuController.save_settings()
-                calculate_statistics()
                 pygame.quit()
                 sys.exit(0)
 
         try:
-            #Music
+            # =========================================================
+            # MULTIPLAYER SYNC LOGIC
+            # =========================================================
+            if net.connected and not SETTINGS.menu_showing:
+                
+                # 1. Gather Input Keys (For Animation Sync)
+                keys = pygame.key.get_pressed()
+                input_keys = {
+                    'w': keys[pygame.K_w], 
+                    'a': keys[pygame.K_a],
+                    's': keys[pygame.K_s], 
+                    'd': keys[pygame.K_d]
+                }
+
+                # 2. Package Data
+                local_data = {
+                    'id': SETTINGS.my_id,
+                    'team': SETTINGS.player_team,
+                    'x': gamePlayer.real_x,
+                    'y': gamePlayer.real_y,
+                    'angle': gamePlayer.angle,
+                    'keys': input_keys,
+                    'health': SETTINGS.player_health,
+                    'is_shooting': SETTINGS.mouse_btn_active,
+                    'weapon': SETTINGS.current_gun.name if SETTINGS.current_gun else 'None'
+                }
+
+                # 3. Send to Server & Receive Updates
+                # This function sends our dict and returns a list of all other players
+                server_data = net.send(local_data)
+
+                # 4. Process Received Data
+                current_server_ids = []
+                
+                for p_data in server_data:
+                    p_id = p_data['id']
+                    
+                    # Skip our own data
+                    if p_id == SETTINGS.my_id:
+                        continue
+                        
+                    current_server_ids.append(p_id)
+
+                    if p_id in SETTINGS.remote_players:
+                        # UPDATE existing player
+                        SETTINGS.remote_players[p_id].update(p_data)
+                    else:
+                        # CREATE new player
+                        new_player = PLAYER.RemotePlayer(p_id, p_data['team'])
+                        SETTINGS.remote_players[p_id] = new_player
+
+                # 5. Clean up disconnected players
+                # If a player is in our list but not in the server response, they disconnected
+                disconnected = [pid for pid in SETTINGS.remote_players if pid not in current_server_ids]
+                for pid in disconnected:
+                    # Remove from render list
+                    if SETTINGS.remote_players[pid] in SETTINGS.npc_list:
+                        SETTINGS.npc_list.remove(SETTINGS.remote_players[pid])
+                    del SETTINGS.remote_players[pid]
+            # =========================================================
+
+            # Music & Menu Logic
             musicController.control_music()
             
             if SETTINGS.menu_showing and menuController.current_type == 'main':
                 gameCanvas.window.fill(SETTINGS.WHITE)
                 menuController.control()
-
-                #Load custom maps
+                # (Keep your existing map loading logic here...)
                 if SETTINGS.playing_customs:
                     SETTINGS.levels_list = SETTINGS.clevels_list
                     gameLoad.get_canvas_size()
                     gameLoad.load_new_level()
-
-                #Load generated maps
                 elif SETTINGS.playing_new:
-                    # LASER TAG - Use the same arena map as laser tag mode (already loaded)
-                    # mapGenerator.__init__()
-                    # mapGenerator.generate_levels(SETTINGS.glevels_amount, SETTINGS.glevels_size)
+                    # LASER TAG - Use the same arena map
                     SETTINGS.levels_list = SETTINGS.glevels_list
                     gameLoad.get_canvas_size()
                     gameLoad.load_new_level()
-
-                #Or.. If they are playing the tutorial
                 elif SETTINGS.playing_tutorial:
                     SETTINGS.levels_list = SETTINGS.tlevels_list
                     gameLoad.get_canvas_size()
@@ -487,68 +535,39 @@ def main_loop():
                 menuController.control()
                 
             else:
-                #Update logic
+                # Game Logic
                 gamePlayer.control(gameCanvas.canvas)
                 
-                if SETTINGS.fov >= 100:
-                    SETTINGS.fov = 100
-                elif SETTINGS.fov <= 10:
-                    SETTINGS.fov = 10
+                if SETTINGS.switch_mode: gameCanvas.change_mode()
 
-                if SETTINGS.switch_mode:
-                    gameCanvas.change_mode()
-
-                #Render - Draw 
+                # Render
                 gameRaycast.calculate()
                 gameCanvas.draw()
                 
-                
                 if SETTINGS.mode == 1:
                     render_screen(gameCanvas.canvas)
-
-                    #BETA
-                  #  beta.draw(gameCanvas.window)
-                
                 elif SETTINGS.mode == 0:
                     gameMap.draw(gameCanvas.window)                
                     gamePlayer.draw(gameCanvas.window)
-
-                    for x in SETTINGS.raylines:
-                        pygame.draw.line(gameCanvas.window, SETTINGS.RED, (x[0][0]/4, x[0][1]/4), (x[1][0]/4, x[1][1]/4))
-                    SETTINGS.raylines = []
-
-                    for i in SETTINGS.npc_list:
-                        # Skip drawing orange team NPCs on minimap (hide enemy positions)
-                        if i.team == 'orange':
-                            continue
-
-                        # Use team colors on minimap for laser tag
-                        npc_color = SETTINGS.team_colors.get(i.team, SETTINGS.RED)
-                        if i.rect and i.dist <= SETTINGS.render * SETTINGS.tile_size * 1.2:
-                            pygame.draw.rect(gameCanvas.window, npc_color, (i.rect[0]/4, i.rect[1]/4, i.rect[2]/4, i.rect[3]/4))
-                        elif i.rect:
-                            # Darken the team color for distant NPCs
-                            dark_color = tuple(max(0, c - 100) for c in npc_color)
-                            pygame.draw.rect(gameCanvas.window, dark_color, (i.rect[0]/4, i.rect[1]/4, i.rect[2]/4, i.rect[3]/4))
+                    # Draw Remote Players on Map
+                    for npc in SETTINGS.npc_list:
+                        # Only draw if it's a RemotePlayer (checking type attribute safely)
+                        if getattr(npc, 'type', 'npc') == 'remote':
+                            c = SETTINGS.team_colors.get(npc.team, SETTINGS.RED)
+                            pygame.draw.rect(gameCanvas.window, c, (npc.rect[0]/4, npc.rect[1]/4, npc.rect[2]/4, npc.rect[3]/4))
 
                 update_game()
 
         except Exception as e:
             menuController.save_settings()
-            calculate_statistics()
-            logging.warning("DUGA has crashed. Please send this report to MaxwellSalmon, so he can fix it.")
             logging.exception("Error message: ")
             pygame.quit()
             sys.exit(0)
 
-        #Update Game
         pygame.display.update()
         delta_time = clock.tick(SETTINGS.fps)
         SETTINGS.dt = delta_time / 1000.0
         SETTINGS.cfps = int(clock.get_fps())
-        #pygame.display.set_caption(SETTINGS.caption % SETTINGS.cfps)
-
-       # allfps.append(clock.get_fps())
 
 #Probably temporary object init
 #SETTINGS.current_level = 5 #temporary

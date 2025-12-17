@@ -301,8 +301,65 @@ class Player:
         canvas.blit(self.sprite, (self.rect.x/4, self.rect.y/4))
         pygame.draw.line(canvas, self.color, (self.rect.center[0]/4, self.rect.center[1]/4), (p1/4, p2/4))
 
+
+# ... (Keep existing Player class) ...
+
+class RemotePlayer:
+    def __init__(self, id, team):
+        self.id = id
+        self.team = team
+        self.type = 'remote'
+        self.dead = False
         
+        # Position and Angle
+        self.real_x = 0
+        self.real_y = 0
+        self.angle = 0
+        self.rect = pygame.Rect(0, 0, SETTINGS.tile_size/3, SETTINGS.tile_size/3)
         
+        # Visuals
+        self.color = SETTINGS.team_colors.get(self.team, SETTINGS.RED)
+        self.sprite = pygame.Surface([SETTINGS.tile_size/12, SETTINGS.tile_size/12])
+        self.sprite.fill(self.color)
+
+        # State for Animation
+        self.keys = {'w': False, 'a': False, 's': False, 'd': False}
+        self.is_shooting = False
+        self.weapon = "None"
+        self.health = 100
+        
+        # Add to global lists so the engine renders it
+        SETTINGS.npc_list.append(self) 
+
+    def update(self, data):
+        """Syncs local properties with server data"""
+        self.real_x = data['x']
+        self.real_y = data['y']
+        self.angle = data['angle']
+        self.keys = data['keys'] # Used for walking animation logic later
+        self.is_shooting = data['is_shooting']
+        self.weapon = data['weapon']
+        self.health = data['health']
+        
+        # Update physical rect
+        self.rect.x = self.real_x
+        self.rect.y = self.real_y
+        
+        # Death check
+        if self.health <= 0:
+            self.dead = True
+        else:
+            self.dead = False
+
+    def think(self):
+        # Calculate distance to local player (Required for the 2.5D rendering engine)
+        xpos = SETTINGS.player_rect.centerx - self.rect.centerx
+        ypos = SETTINGS.player_rect.centery - self.rect.centery
+        self.dist = math.sqrt(xpos*xpos + ypos*ypos)
+        
+        # This method is called by the main loop. 
+        # In the future, you will put sprite/animation update logic here.
+        pass     
 
 
 
