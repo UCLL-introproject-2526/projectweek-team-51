@@ -206,3 +206,5 @@ statistics.dat
 *.7z
 *.rar
 
+# Game data files that change during gameplay
+lazertag/data/statistics.dat
