@@ -82,13 +82,7 @@ class Sprite:
             self.parent.hit_rect = self.new_rect
 
     def draw(self, canvas):
-        # Draw team-colored outline for NPCs in laser tag mode
-        if self.parent and hasattr(self.parent, 'team'):
-            team_color = SETTINGS.team_colors.get(self.parent.team, (255, 255, 255))
-            # Draw a rectangle outline around the NPC sprite
-            outline_rect = self.new_rect.inflate(4, 4)
-            pygame.draw.rect(canvas, team_color, outline_rect, 2)
-
+        # No team outlines in laser tag mode - all NPCs blend in
         canvas.blit(self.new_size, self.new_rect)
 
     def update_pos(self, pos):
