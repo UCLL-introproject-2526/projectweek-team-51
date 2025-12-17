@@ -48,7 +48,7 @@ screen_shake = 0
 
 
 '''Raycasting settings'''
-resolution = 140
+resolution = 1280  # Full native resolution - 1:1 pixel mapping for sharpest quality
 fov = 60
 render = 16
 shade = False
@@ -112,6 +112,8 @@ last_player_map_pos = None
 #Wall textures and sprites go here.
 texture_darken = 100
 texture_list = []
+floor_texture = None
+ceiling_texture = None
 
 '''Weapon settings'''
 #Settings for guns and ammo go here.
