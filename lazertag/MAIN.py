@@ -454,60 +454,63 @@ def main_loop():
             # =========================================================
             if net.connected and not SETTINGS.menu_showing:
                 
-                # 1. Gather Input Keys (For Animation Sync)
+                # 1. Gather Input Keys (for server authoritative movement/shooting)
                 keys = pygame.key.get_pressed()
-                input_keys = {
-                    'w': keys[pygame.K_w], 
-                    'a': keys[pygame.K_a],
-                    's': keys[pygame.K_s], 
-                    'd': keys[pygame.K_d]
-                }
-
-                # 2. Package Data
                 local_data = {
-                    'id': SETTINGS.my_id,
-                    'team': SETTINGS.player_team,
-                    'x': gamePlayer.real_x,
-                    'y': gamePlayer.real_y,
-                    'angle': gamePlayer.angle,
-                    'keys': input_keys,
-                    'health': SETTINGS.player_health,
-                    'is_shooting': SETTINGS.mouse_btn_active,
-                    'weapon': SETTINGS.current_gun.name if SETTINGS.current_gun else 'None'
+                    'type': 'input',
+                    'up': bool(keys[pygame.K_w]),
+                    'down': bool(keys[pygame.K_s]),
+                    'left': bool(keys[pygame.K_a]),
+                    'right': bool(keys[pygame.K_d]),
+                    'shoot': bool(SETTINGS.mouse_btn_active),
+                    'angle': float(gamePlayer.angle)
                 }
 
                 # 3. Send to Server & Receive Updates
-                # This function sends our dict and returns a list of all other players
+                # This sends inputs and returns a full state snapshot dict
                 server_data = net.send(local_data)
 
                 # 4. Process Received Data
-                current_server_ids = []
-                
-                for p_data in server_data:
-                    p_id = p_data['id']
-                    
-                    # Skip our own data
-                    if p_id == SETTINGS.my_id:
-                        continue
-                        
-                    current_server_ids.append(p_id)
-
-                    if p_id in SETTINGS.remote_players:
-                        # UPDATE existing player
-                        SETTINGS.remote_players[p_id].update(p_data)
-                    else:
-                        # CREATE new player
-                        new_player = PLAYER.RemotePlayer(p_id, p_data['team'])
-                        SETTINGS.remote_players[p_id] = new_player
+                if isinstance(server_data, dict) and server_data.get('type') == 'state':
+                    # Establish/refresh our id
+                    if 'your_id' in server_data and not SETTINGS.my_id:
+                        SETTINGS.my_id = server_data['your_id']
+                    current_server_ids = []
+                    for p_data in server_data.get('players', []):
+                        p_id = p_data.get('id')
+                        if p_id is None:
+                            continue
+                        # Update self (authoritative position/alive)
+                        if SETTINGS.my_id and p_id == SETTINGS.my_id:
+                            # Sync alive/death
+                            if not p_data.get('alive', True):
+                                SETTINGS.player_states['dead'] = True
+                            # Sync position
+                            server_x = p_data.get('x', gamePlayer.real_x)
+                            server_y = p_data.get('y', gamePlayer.real_y)
+                            gamePlayer.real_x = server_x
+                            gamePlayer.real_y = server_y
+                            SETTINGS.player_rect.center = (int(server_x), int(server_y))
+                        else:
+                            current_server_ids.append(p_id)
+                            if p_id in SETTINGS.remote_players:
+                                # UPDATE existing player
+                                SETTINGS.remote_players[p_id].update(p_data)
+                            else:
+                                # CREATE new player
+                                new_player = PLAYER.RemotePlayer(p_id, p_data.get('team', 0))
+                                SETTINGS.remote_players[p_id] = new_player
 
                 # 5. Clean up disconnected players
                 # If a player is in our list but not in the server response, they disconnected
-                disconnected = [pid for pid in SETTINGS.remote_players if pid not in current_server_ids]
-                for pid in disconnected:
-                    # Remove from render list
-                    if SETTINGS.remote_players[pid] in SETTINGS.npc_list:
-                        SETTINGS.npc_list.remove(SETTINGS.remote_players[pid])
-                    del SETTINGS.remote_players[pid]
+                if isinstance(server_data, dict):
+                    current_server_ids = [p.get('id') for p in server_data.get('players', []) if p.get('id') != SETTINGS.my_id]
+                    disconnected = [pid for pid in SETTINGS.remote_players if pid not in current_server_ids]
+                    for pid in disconnected:
+                        # Remove from render list
+                        if SETTINGS.remote_players[pid] in SETTINGS.npc_list:
+                            SETTINGS.npc_list.remove(SETTINGS.remote_players[pid])
+                        del SETTINGS.remote_players[pid]
             # =========================================================
 
             # Music & Menu Logic

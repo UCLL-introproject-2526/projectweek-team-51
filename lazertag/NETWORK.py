@@ -6,7 +6,7 @@ class Network:
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # REPLACE '127.0.0.1' WITH THE SERVER IP IF PLAYING OVER INTERNET
         self.server = "127.0.0.1" 
-        self.port = 5555
+        self.port = 9001
         self.addr = (self.server, self.port)
         self.connected = self.connect()
 

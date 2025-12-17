@@ -1,0 +1,9 @@
+version: "3.9"
+
+services:
+  game-server:
+    build: .
+    container_name: game-server
+    restart: unless-stopped
+    ports:
+      - "9001:9001"
