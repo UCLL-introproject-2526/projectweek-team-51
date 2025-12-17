@@ -1,4 +1,4 @@
-#This is the MAIN script of DUGA. This is where the main loop is located and this is where all resources are loaded.
+#This is the MAIN script of us. This is where the main loop is located and this is where all resources are loaded.
 #All the classes will be located at the bottom of this script.
 
 import pygame
