@@ -133,10 +133,10 @@ class MainMenu(Menu):
 
     def __init__(self):
         Menu.__init__(self, '')
-        self.new_button = Button((SETTINGS.canvas_actual_width/2, 200, 200, 60), "NEW GAME")
-        self.options_button = Button((SETTINGS.canvas_actual_width/2, 270, 200, 60), "OPTIONS")
-        self.score_button = Button((SETTINGS.canvas_actual_width/2, 340, 200, 60), "STATISTICS")
-        self.quit_button = Button((SETTINGS.canvas_actual_width/2, 410, 200, 60), "QUIT")
+        self.new_button = Button((SETTINGS.canvas_actual_width/2, 320, 200, 60), "NEW GAME")
+        self.options_button = Button((SETTINGS.canvas_actual_width/2, 410, 200, 60), "OPTIONS")
+        self.score_button = Button((SETTINGS.canvas_actual_width/2, 500, 200, 60), "STATISTICS")
+        self.quit_button = Button((SETTINGS.canvas_actual_width/2, 590, 200, 60), "QUIT")
 
         self.logo = pygame.image.load(os.path.join('graphics', 'logo_cutout.png')).convert_alpha()
         self.logo_rect = self.logo.get_rect()
@@ -177,32 +177,9 @@ class MainMenu(Menu):
         self.quit_button.draw(canvas)
 
     def logo_animation(self, canvas):
-        # LASER TAG - Make texture only show through the logo letters
-        # Fill with dark background first
-        self.logo_surface.fill((20, 20, 25, 0))
-
-        # Draw scrolling texture tiles
-        for tile in self.tiles:
-            self.logo_surface.blit(tile[0], (tile[1], self.logo_rect.top))
-            tile[1] -= 1
-
-            if tile[1] < self.logo_surface_rect.left - 160:
-                tile[1] += (160 * len(self.tiles))
-
-        # Use the logo's alpha channel to cut out the texture
-        # Draw logo on top, and use its alpha to determine visibility
-        # Create a copy of logo surface with just the texture
-        texture_copy = self.logo_surface.copy()
-
-        # Fill logo surface with transparent background
-        self.logo_surface.fill((20, 20, 25, 0))
-
-        # Blit texture copy using logo as a mask
-        # Manually copy pixels where logo is opaque
-        self.logo_surface.blit(texture_copy, (0, 0))
-        self.logo_surface.blit(self.logo, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-
-        canvas.blit(self.logo_surface, self.logo_surface_rect)
+        # LASER TAG - Simple glowing logo effect
+        # Draw the logo directly with a subtle glow
+        canvas.blit(self.logo, self.logo_surface_rect)
         
         
 
@@ -210,9 +187,9 @@ class NewMenu(Menu):
 
     def __init__(self, settings):
         Menu.__init__(self, 'NEW GAME')
-        self.new_button = Button((SETTINGS.canvas_actual_width/2, 200, 200, 60), "MULTIPLAYER")
-        self.tutorial_button = Button((SETTINGS.canvas_actual_width/2, 270, 200, 60), "LASER  TAG")
-        self.back_button = Button((SETTINGS.canvas_actual_width/2, 500, 200, 60), "BACK")
+        self.new_button = Button((SETTINGS.canvas_actual_width/2, 320, 200, 60), "MULTIPLAYER")
+        self.tutorial_button = Button((SETTINGS.canvas_actual_width/2, 410, 200, 60), "LASER  TAG")
+        self.back_button = Button((SETTINGS.canvas_actual_width/2, 590, 200, 60), "BACK")
 
         self.loading = TEXT.Text(0,0, "LOADING...", SETTINGS.BLACK, "DUGAFONT.ttf", 74)
         self.loading.update_pos((SETTINGS.canvas_actual_width/2)-(self.loading.layout.get_width()/2)+8, (SETTINGS.canvas_target_height/2)-(self.loading.layout.get_height()/2))
