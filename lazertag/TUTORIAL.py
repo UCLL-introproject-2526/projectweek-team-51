@@ -9,7 +9,7 @@ class Controller:
 
         #Strings
         self.welcome = {
-            'string' : "WELCOME  TO  DUGA!  PRESS  'E'  TO  OPEN  THE  DOOR",
+            'string' : "WELCOME  TO  Lazer!  PRESS  'W'  TO WALK",
             'tiles' : [[1,11], [1,10],
                        [2,10], [2,11], [2,12],
                        [3,10], [3,11], [3,12],
