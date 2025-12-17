@@ -557,27 +557,8 @@ class CreditsMenu(Menu):
         self.createdby = TEXT.Text(0,0, 'CREATED  BY', SETTINGS.LIGHTGRAY, "DUGAFONT.ttf", 24)
         self.createdby.update_pos((SETTINGS.canvas_actual_width/2)-(self.createdby.layout.get_width()/2)+8, 130)
 
-        self.maxwellsalmon = TEXT.Text(0,0, 'MAXWELLSALMON', SETTINGS.DARKGRAY, "DUGAFONT.ttf", 38)
-        self.maxwellsalmon.update_pos((SETTINGS.canvas_actual_width/2)-(self.maxwellsalmon.layout.get_width()/2)+8, 160)
-
-        #Music
-        self.musicby = TEXT.Text(0,0, 'MUSIC  BY', SETTINGS.LIGHTGRAY, "DUGAFONT.ttf", 20)
-        self.musicby.update_pos((SETTINGS.canvas_actual_width/2)-(self.musicby.layout.get_width()/2)+8, 210)
-        
-        self.eli = TEXT.Text(0,0, 'HUD-LUM @ SOUNDCLOUD', SETTINGS.DARKGRAY, "DUGAFONT.ttf", 30)
-        self.eli.update_pos((SETTINGS.canvas_actual_width/2)-(self.eli.layout.get_width()/2)+8, 240)
-
-        #Maps
-        self.contributions = TEXT.Text(0,0, 'THANKS  TO', SETTINGS.LIGHTGRAY, "DUGAFONT.ttf", 20)
-        self.contributions.update_pos((SETTINGS.canvas_actual_width/2)-(self.contributions.layout.get_width()/2)+8, 290)
-
-        self.contributors = TEXT.Text(0,0, 'POELE,  OLE,  ROCKETTHEMINIFIG,  ANDY BOY,  J4CKINS' , SETTINGS.DARKGRAY, "DUGAFONT.ttf", 20)
-        self.contributors.update_pos((SETTINGS.canvas_actual_width/2)-(self.contributors.layout.get_width()/2)+8, 320)
-        self.contributors2 =  TEXT.Text(0,0, 'THEFATHOBBITS,  STARLITEPONY' , SETTINGS.DARKGRAY, "DUGAFONT.ttf", 20)
-        self.contributors2.update_pos((SETTINGS.canvas_actual_width/2)-(self.contributors2.layout.get_width()/2)+8, 345)
-
-        self.specialthanks = TEXT.Text(0,0, 'THANKS  TO  THE  PYGAME  COMMUNITY  FOR  HELP  AND  MOTIVATION', SETTINGS.DARKGRAY, "DUGAFONT.ttf", 15)
-        self.specialthanks.update_pos((SETTINGS.canvas_actual_width/2)-(self.specialthanks.layout.get_width()/2)+8, 380)
+        self.creators = TEXT.Text(0,0, 'LAMA, ATAY, VOLODYMYR, AHMED, YARO', SETTINGS.DARKGRAY, "DUGAFONT.ttf", 38)
+        self.creators.update_pos((SETTINGS.canvas_actual_width/2)-(self.creators.layout.get_width()/2)+8, 160)
 
         self.and_you = TEXT.Text(0,0, 'THANKS  TO  YOU  FOR  PLAYING!' , SETTINGS.GREEN, "DUGAFONT.ttf", 22)
         self.and_you.update_pos((SETTINGS.canvas_actual_width/2)-(self.and_you.layout.get_width()/2)+8, 410)
@@ -590,13 +571,7 @@ class CreditsMenu(Menu):
         self.back_button.draw(canvas)
         self.title.draw(canvas)
         self.createdby.draw(canvas)
-        self.musicby.draw(canvas)
-        self.eli.draw(canvas)
-        self.contributions.draw(canvas)
-        self.contributors.draw(canvas)
-        self.contributors2.draw(canvas)
-        self.specialthanks.draw(canvas)
-        self.maxwellsalmon.draw(canvas)
+        self.creators.draw(canvas)
 
         if show or SETTINGS.statistics['playtime'] >= 120:
             self.and_you.draw(canvas)
