@@ -63,8 +63,6 @@ class Controller:
                     self.current_menu = 'options'
                 elif self.mainMenu.score_button.get_clicked():
                     self.current_menu = 'score'
-                elif self.mainMenu.credits_button.get_clicked():
-                    self.current_menu = 'credits'
                 elif self.mainMenu.quit_button.get_clicked():
                     SETTINGS.quit_game = True
                 #Splash screen
@@ -79,38 +77,11 @@ class Controller:
                 if self.newMenu.back_button.get_clicked():
                     self.current_menu = 'main'
 
-                #Play generated maps
+                # Multiplayer button - placeholder for future implementation
                 elif self.newMenu.new_button.get_clicked():
-                    self.newMenu.reset_inventory()
-                    self.newMenu.loading.draw(self.canvas)
-                    self.new_pressed = True
-                #Check if new levels have been loaded and loading string is showing
-                elif self.new_pressed:
-                    SETTINGS.playing_new = True
-                    self.new_pressed = False
-                elif SETTINGS.playing_new:
-                    self.current_type = 'game'
-                    self.current_menu = 'main'
-                    SETTINGS.current_level = 0
-                    SETTINGS.menu_showing = False
-                    SETTINGS.playing_new = False
+                    pass  # TODO: Implement multiplayer functionality
 
-                #Play custom maps
-                elif self.newMenu.custom_button.get_clicked():
-                    if SETTINGS.clevels_list:
-                        self.newMenu.reset_inventory()
-                        SETTINGS.playing_customs = True
-                    else:
-                        self.newMenu.no_levels_on = True
-                #Check if custom levels have been loaded
-                elif SETTINGS.playing_customs:
-                    self.current_type = 'game'
-                    self.current_menu = 'main'
-                    SETTINGS.current_level = 0
-                    SETTINGS.menu_showing = False
-                    SETTINGS.playing_customs = False
-
-                #Play tutorial
+                # Play laser tag
                 elif self.newMenu.tutorial_button.get_clicked():
                     self.newMenu.reset_inventory()
                     SETTINGS.playing_tutorial = True
@@ -132,11 +103,6 @@ class Controller:
             elif self.current_menu == 'score':
                 self.scoreMenu.draw(self.canvas)
                 if self.scoreMenu.back_button.get_clicked():
-                    self.current_menu = 'main'
-
-            elif self.current_menu == 'credits':
-                self.creditsMenu.draw(self.canvas, self.shut_up)
-                if self.creditsMenu.back_button.get_clicked():
                     self.current_menu = 'main'
 
         #Show menu in game 
@@ -164,14 +130,13 @@ class Menu:
 
 
 class MainMenu(Menu):
-    
+
     def __init__(self):
         Menu.__init__(self, '')
         self.new_button = Button((SETTINGS.canvas_actual_width/2, 200, 200, 60), "NEW GAME")
         self.options_button = Button((SETTINGS.canvas_actual_width/2, 270, 200, 60), "OPTIONS")
         self.score_button = Button((SETTINGS.canvas_actual_width/2, 340, 200, 60), "STATISTICS")
-        self.credits_button = Button((SETTINGS.canvas_actual_width/2, 410, 200, 60), "CREDITS")
-        self.quit_button = Button((SETTINGS.canvas_actual_width/2, 500, 200, 60), "QUIT")
+        self.quit_button = Button((SETTINGS.canvas_actual_width/2, 410, 200, 60), "QUIT")
 
         self.logo = pygame.image.load(os.path.join('graphics', 'logo_cutout.png')).convert_alpha()
         self.logo_rect = self.logo.get_rect()
@@ -209,7 +174,6 @@ class MainMenu(Menu):
         self.new_button.draw(canvas)
         self.options_button.draw(canvas)
         self.score_button.draw(canvas)
-        self.credits_button.draw(canvas)
         self.quit_button.draw(canvas)
 
     def logo_animation(self, canvas):
@@ -246,9 +210,8 @@ class NewMenu(Menu):
 
     def __init__(self, settings):
         Menu.__init__(self, 'NEW GAME')
-        self.new_button = Button((SETTINGS.canvas_actual_width/2, 200, 200, 60), "NEW GAME")
-        self.custom_button = Button((SETTINGS.canvas_actual_width/2, 270, 200, 60), "CUSTOM  MAPS")
-        self.tutorial_button = Button((SETTINGS.canvas_actual_width/2, 325, 200, 30), "LASER  TAG")
+        self.new_button = Button((SETTINGS.canvas_actual_width/2, 200, 200, 60), "MULTIPLAYER")
+        self.tutorial_button = Button((SETTINGS.canvas_actual_width/2, 270, 200, 60), "LASER  TAG")
         self.back_button = Button((SETTINGS.canvas_actual_width/2, 500, 200, 60), "BACK")
 
         self.loading = TEXT.Text(0,0, "LOADING...", SETTINGS.BLACK, "DUGAFONT.ttf", 74)
@@ -265,7 +228,6 @@ class NewMenu(Menu):
         canvas.fill((20, 20, 25))  # Very dark blue-gray background
 
         self.new_button.draw(canvas)
-        self.custom_button.draw(canvas)
         self.tutorial_button.draw(canvas)
         self.back_button.draw(canvas)
         self.title.draw(canvas)
