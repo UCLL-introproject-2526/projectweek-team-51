@@ -1,0 +1,29 @@
+stages:
+  - deploy
+
+variables:
+  REGISTRY: $CI_REGISTRY
+  USER: $CI_REGISTRY_USER
+  REPOSITORY: $CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME
+  TAG: sha-$CI_COMMIT_SHA
+
+deploy_to_stage:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk update && apk add openssh-client
+    - mkdir -p ~/.ssh
+    - echo "$STAGE_SERVER_SSH_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan $STAGE_SERVER_HOST >> ~/.ssh/known_hosts
+  script:
+    - echo "Deploying to stage..."
+    - ssh -o "StrictHostKeyChecking=no" $STAGE_SERVER_USERNAME@$STAGE_SERVER_HOST "
+      cd Game/Game-Server &&
+      git fetch &&
+      git reset --hard origin/stage &&
+      docker compose up --build -d"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "stage" && $CI_COMMIT_MESSAGE =~ /\[deploy\]/'
+      when: always
+    - when: never
