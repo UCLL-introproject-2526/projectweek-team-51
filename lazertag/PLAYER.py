@@ -51,7 +51,6 @@ class Player:
 
         #input variables
         self.mouse2 = 0
-        self.inventory = 0
         self.esc_pressed = False
         self.dont_open_menu = False
         
@@ -175,8 +174,6 @@ class Player:
                             SETTINGS.changing_level = True
                             SOUND.play_sound(self.change_level, 0)
                             
-                            
-
                 madd = self.mouse.get_rel()[0] * self.sensitivity
                 if madd > 38:
                     madd = 38
@@ -184,35 +181,14 @@ class Player:
                     madd = -38
                 self.angle -= madd
                 SETTINGS.player_angle = self.angle
-                
-        #Open inventory
-            if key[pygame.K_i] and self.inventory < 1:
-                if SETTINGS.player_states['invopen']:
-                    SETTINGS.player_states['invopen'] = False
-                    SETTINGS.inv_strings_updated = False
-                else:
-                    SETTINGS.player_states['invopen'] = True
-                    
-                self.inventory += 1
-            elif not key[pygame.K_i]:
-                self.inventory = 0
-
-        #Use escape to close inventory
-            if key[pygame.K_ESCAPE] and SETTINGS.player_states['invopen']:
-                SETTINGS.player_states['invopen'] = False
-                SETTINGS.inv_strings_updated = False
-                self.dont_open_menu = True
-                
-            elif not key[pygame.K_ESCAPE] and not SETTINGS.player_states['invopen']:
-                self.dont_open_menu = False
 
         #Show menu
-            if key[pygame.K_ESCAPE] and not self.dont_open_menu:
-                self.esc_pressed = True
+        if key[pygame.K_ESCAPE] and not self.dont_open_menu:
+            self.esc_pressed = True
 
-            elif self.esc_pressed and not self.dont_open_menu:
-                SETTINGS.menu_showing = True
-                self.esc_pressed = False
+        elif self.esc_pressed and not self.dont_open_menu:
+            SETTINGS.menu_showing = True
+            self.esc_pressed = False
                 
         #Is the player dead or taking damage?
         if self.health > SETTINGS.player_health:
