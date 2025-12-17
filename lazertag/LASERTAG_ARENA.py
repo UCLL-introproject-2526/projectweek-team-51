@@ -40,20 +40,8 @@ def load_laser_tag_arenas():
             [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
         ],
 
-        # NPC spawn positions - 10 GREEN team (RIGHT CORNER), 10 ORANGE team (LEFT CORNER)
+        # NPC spawn positions - ORANGE TEAM ONLY (player vs all)
         'npcs': [
-            # GREEN TEAM - Right corner spawn (columns 17-19, rows 7-11)
-            ([18, 8], 180, 0),   # Green 1 - right corner, facing left
-            ([19, 9], 180, 0),   # Green 2
-            ([18, 10], 180, 0),  # Green 3
-            ([17, 8], 180, 0),   # Green 4
-            ([19, 7], 180, 0),   # Green 5
-            ([17, 9], 180, 0),   # Green 6
-            ([18, 7], 180, 0),   # Green 7
-            ([19, 10], 180, 0),  # Green 8
-            ([17, 10], 180, 0),  # Green 9
-            ([18, 11], 180, 0),  # Green 10
-
             # ORANGE TEAM - Left corner spawn (columns 2-4, rows 7-11)
             ([3, 8], 0, 0),      # Orange 1 - left corner, facing right
             ([2, 9], 0, 0),      # Orange 2
