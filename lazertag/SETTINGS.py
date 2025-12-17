@@ -35,8 +35,8 @@ playing_tutorial = False
 
 
 '''Canvas settings'''
-canvas_target_width = 700    #700
-canvas_target_height = 550    #600
+canvas_target_width = 1280    # 720p width - laptop friendly
+canvas_target_height = 720    # 720p height - laptop friendly
 #Below this point are the non-configurable canvas variables.
 canvas_actual_width = 0
 canvas_map_width = None

@@ -25,11 +25,8 @@ import HUD
 import ITEMS
 import INVENTORY
 import ENTITIES
-import SEGMENTS
-import GENERATION
 import MENU
 import MUSIC
-import TUTORIAL
 import LASERTAG_ARENA
 
 pygame.init()
@@ -172,12 +169,16 @@ class Canvas:
             self.height = SETTINGS.canvas_target_height
             self.res_width = SETTINGS.canvas_actual_width
 
+        # Center the window on screen
+        import os
+        os.environ['SDL_VIDEO_CENTERED'] = '1'
+
         if SETTINGS.fullscreen:
-            self.window = pygame.display.set_mode((self.width, int(self.height+(self.height*0.15))), pygame.FULLSCREEN)        
+            self.window = pygame.display.set_mode((self.width, int(self.height+(self.height*0.15))), pygame.FULLSCREEN)
         else:
             self.window = pygame.display.set_mode((self.width, int(self.height+(self.height*0.15))))
         self.canvas = pygame.Surface((self.width, self.height))
-        
+
         pygame.display.set_caption("Lazer Tag")
 
 
@@ -301,10 +302,6 @@ def render_screen(canvas):
     #Draw HUD and canvas
     gameCanvas.window.blit(canvas, (SETTINGS.axes))
     gameHUD.render(gameCanvas.window)
-
-    #Draw tutorial strings
-    if SETTINGS.levels_list == SETTINGS.tlevels_list:
-            tutorialController.control(gameCanvas.window)
 
 def update_game():
     if SETTINGS.npc_list:
@@ -564,9 +561,6 @@ if __name__ == '__main__':
     # Load laser tag arena instead of generated maps
     LASERTAG_ARENA.load_laser_tag_arenas()
 
-    # Keep mapGenerator available for menu
-    mapGenerator = GENERATION.Generator()
-
     gameLoad.get_canvas_size()
 
     #Setup and classes
@@ -595,7 +589,6 @@ if __name__ == '__main__':
     #Controller classes
     menuController = MENU.Controller(gameCanvas.window)
     musicController = MUSIC.Music()
-    tutorialController = TUTORIAL.Controller()
 
     #Run at last
     main_loop()
