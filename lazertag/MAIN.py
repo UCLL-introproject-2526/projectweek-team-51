@@ -136,7 +136,7 @@ class Load:
                 
         SETTINGS.walkable_area = list(PATHFINDING.pathfind(SETTINGS.player_map_pos, SETTINGS.all_tiles[-1].map_pos))
         gameMap.move_inaccessible_entities()
-        ENTITIES.spawn_npcs()
+        #ENTITIES.spawn_npcs()
         ENTITIES.spawn_items()
 
 #Texturing
@@ -501,13 +501,20 @@ def main_loop():
                 
                 for p_data in remote_data_list:
                     p_id = p_data['id']
-                    
-                    # Handle Self (Sync Health)
+                    print(f"DEBUG: My ID={SETTINGS.my_id} | Server P_ID={p_id}")
                     if p_id == SETTINGS.my_id:
-                        # Server is authoritative on health, so we update ours
+                        # 1. Authoritative Health Sync
                         SETTINGS.player_health = p_data.get('health', SETTINGS.player_health)
-                        continue
                         
+                        # 2. GHOST CLEANUP: If a remote object exists for ME, delete it
+                        if p_id in SETTINGS.remote_players:
+                            rp = SETTINGS.remote_players.pop(p_id)
+                            if rp in SETTINGS.npc_list: SETTINGS.npc_list.remove(rp)
+                            # Remove the 3D sprite from the engine
+                            if hasattr(rp, 'sprite') and rp.sprite in SETTINGS.all_sprites:
+                                SETTINGS.all_sprites.remove(rp.sprite)
+                        continue
+
                     active_remote_ids.append(p_id)
                     
                     # Handle Others (Update or Create)

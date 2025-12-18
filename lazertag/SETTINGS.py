@@ -291,6 +291,6 @@ temp = []
 # ... (Keep all existing code) ...
 
 '''Multiplayer Settings'''
-my_id = random.randint(0, 999999)  # Generate a temporary unique ID
+my_id = 0  # Generate a temporary unique ID
 remote_players = {}                # Stores RemotePlayer objects: {id: object}
 hit_events = []                    # Queue for hit events (implemented in next steps)

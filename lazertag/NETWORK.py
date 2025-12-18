@@ -77,14 +77,12 @@ class Network:
             return False
 
     def send(self, data):
-        """
-        Sends local inputs and returns the fully parsed list of all players.
-        """
         if not self.connected:
             return []
 
-        # 1. Send Inputs
         keys = data.get("keys", {})
+        
+        # 1. Send Local Data (Added 'weapon')
         msg = {
             "type": "input",
             "up": bool(keys.get("w", False)),
@@ -93,37 +91,37 @@ class Network:
             "right": bool(keys.get("d", False)),
             "shoot": bool(data.get("is_shooting", False)),
             "aim_x": float(data.get("angle", 0.0)),
-            # Send X/Y only for debug/map checks (server ignores them for physics)
             "x": float(data.get("x", 0.0)),
-            "y": float(data.get("y", 0.0))
+            "y": float(data.get("y", 0.0)),
+            "weapon": str(data.get("weapon", "None")) # <--- NEW: Send Weapon Name
         }
         self._send_json(msg)
 
-        # 2. Receive and Parse State
+        # 2. Receive Remote Data
         with self._state_lock:
             state = self._latest_state
         if not state:
             return []
-
+        if "your_id" in state:
+            SETTINGS.my_id = state["your_id"]
         players = state.get("players", [])
         out = []
         for p in players:
             try:
                 team_idx = p.get("team", 0)
                 team_str = "green" if team_idx == 0 else "orange"
-                
-                # --- NEW: Extract all the new server fields ---
                 out.append({
                     "id": p.get("id"),
                     "team": team_str,
                     "x": p.get("x", 0.0),
                     "y": p.get("y", 0.0),
                     "angle": p.get("angle", 0.0),
-                    "health": p.get("health", 100),         # NEW
-                    "is_shooting": p.get("is_shooting", False), # NEW
-                    "keys": p.get("keys", {}),              # NEW
-                    "hits": p.get("hits", []),              # NEW
-                    "alive": p.get("alive", True)
+                    "health": p.get("health", 100),
+                    "is_shooting": p.get("is_shooting", False),
+                    "keys": p.get("keys", {}),
+                    "hits": p.get("hits", []),
+                    "alive": p.get("alive", True),
+                    "weapon": p.get("weapon", "None") # <--- NEW: Receive Weapon Name
                 })
             except Exception:
                 continue
