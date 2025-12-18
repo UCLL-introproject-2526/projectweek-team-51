@@ -1,0 +1,8 @@
+__pycache__/
+Andet/
+build/
+dist/
+pyinstaller.exe
+
+# Game data files that change during gameplay
+data/statistics.dat
