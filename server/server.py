@@ -232,37 +232,47 @@ class GameServer:
 		new_id = self._next_player_id
 		self._next_player_id += 1
 		return new_id
-
 	def _client_reader_loop(self, conn: ClientConnection):
-		player_id = conn.player_id
-		try:
-			while self._running.is_set():
-				line = conn.reader.readline()
-				if not line:
-					break
-				try:
-					msg = json.loads(line)
-				except json.JSONDecodeError:
-					continue
-				if not isinstance(msg, dict):
-					continue
-				if msg.get("type") == "input":
-					up = bool(msg.get("up", False))
-					down = bool(msg.get("down", False))
-					left = bool(msg.get("left", False))
-					right = bool(msg.get("right", False))
-					shoot = bool(msg.get("shoot", False))
-					aim_x = msg.get("aim_x", None)
-					aim_y = msg.get("aim_y", None)
-					with self.game_state.lock:
-						player = self.game_state.players.get(player_id)
-						if player:
-							player.update_inputs(up, down, left, right, shoot, aim_x, aim_y)
-				# ignore other message types
-		except Exception:
-			pass
-		finally:
-			self._disconnect_client(player_id)
+			player_id = conn.player_id
+			try:
+				while self._running.is_set():
+					line = conn.reader.readline()
+					if not line:
+						break
+					try:
+						msg = json.loads(line)
+					except json.JSONDecodeError:
+						continue
+					if not isinstance(msg, dict):
+						continue
+					
+					if msg.get("type") == "input":
+						# --- NEW: Print received data (including x, y) ---
+						# We explicitly get x and y to show we "expect" them, 
+						# then print the full message for debugging.
+						client_x = msg.get("x")
+						client_y = msg.get("y")
+						print(f"[Server] ID {player_id} sent: {msg}")
+
+						up = bool(msg.get("up", False))
+						down = bool(msg.get("down", False))
+						left = bool(msg.get("left", False))
+						right = bool(msg.get("right", False))
+						shoot = bool(msg.get("shoot", False))
+						# 'aim_x' here actually receives the Angle (degrees) from the client
+						aim_angle = msg.get("aim_x", None)
+						
+						with self.game_state.lock:
+							player = self.game_state.players.get(player_id)
+							if player:
+								# We pass 'aim_angle' into the angle_deg argument (6th argument)
+								# We ignore the client's x/y for physics to prevent cheating (Authoritative Server)
+								player.update_inputs(up, down, left, right, shoot, aim_angle, None)
+					# ignore other message types
+			except Exception:
+				pass
+			finally:
+				self._disconnect_client(player_id)
 
 	def _disconnect_client(self, player_id: int):
 		with self._clients_lock:

@@ -8,7 +8,7 @@ class Network:
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         # REPLACE '127.0.0.1' WITH THE SERVER IP IF PLAYING OVER INTERNET
-        self.server = "127.0.0.1"
+        self.server = "0.0.0.0"
         self.port = 9001
         self.addr = (self.server, self.port)
         self.connected = False
@@ -96,6 +96,10 @@ class Network:
             # Server currently reads aim_x into angle parameter due to positional usage.
             # Send our aiming angle degrees via "aim_x" to match current server expectation.
             "aim_x": float(data.get("angle", 0.0)),
+            
+            # --- NEW: SEND X/Y COORDINATES ---
+            "x": float(data.get("x", 0.0)),
+            "y": float(data.get("y", 0.0))
         }
         self._send_json(msg)
 
