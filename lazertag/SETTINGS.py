@@ -139,7 +139,7 @@ team_colors = {
     'green': (0, 255, 0),      # Bright green
     'orange': (255, 165, 0)    # Bright orange
 }
-win_score = 20  # First team to reach this score wins
+win_score = 10  # First team to reach this score wins
 game_winner = None  # Stores which team won
 
 

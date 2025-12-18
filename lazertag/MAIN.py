@@ -313,7 +313,7 @@ def update_game():
     for item in SETTINGS.all_items:
         item.update()
 
-    # Check laser tag win condition - first team to 20 kills wins
+    # Check laser tag win condition - first team to 10 kills wins
     if SETTINGS.team_kills['green'] >= SETTINGS.win_score and not SETTINGS.game_won:
         SETTINGS.game_winner = 'green'
         SETTINGS.game_won = True
