@@ -313,17 +313,13 @@ def update_game():
     for item in SETTINGS.all_items:
         item.update()
 
-    # Check laser tag win condition - first team to 10 kills wins
-    if SETTINGS.team_kills['green'] >= SETTINGS.win_score and not SETTINGS.game_won:
-        SETTINGS.game_winner = 'green'
-        SETTINGS.game_won = True
-        gameLoad.timer = 0
-        text.update_string('GREEN  TEAM  WINS!')
-    elif SETTINGS.team_kills['orange'] >= SETTINGS.win_score and not SETTINGS.game_won:
-        SETTINGS.game_winner = 'orange'
-        SETTINGS.game_won = True
-        gameLoad.timer = 0
-        text.update_string('ORANGE  TEAM  WINS!')
+    # NOTE: The server now dictates the winner via NETWORK.py updates.
+    # We simply check if SETTINGS.game_won is True.
+    if SETTINGS.game_won:
+        if SETTINGS.game_winner == 'green':
+             text.update_string('GREEN  TEAM  WINS!')
+        elif SETTINGS.game_winner == 'orange':
+             text.update_string('ORANGE  TEAM  WINS!')
 
     # Display win message and return to menu
     if SETTINGS.game_won and gameLoad.timer < 4:
@@ -467,11 +463,12 @@ def main_loop():
                 }
 
                 # 2. Package Local Data to Send
+                # FIX: Send CENTER Coordinates (x, y) instead of Top-Left
                 local_data = {
                     'id': SETTINGS.my_id,
                     'team': SETTINGS.player_team,
-                    'x': gamePlayer.real_x,
-                    'y': gamePlayer.real_y,
+                    'x': gamePlayer.real_x + (gamePlayer.rect.width / 2),
+                    'y': gamePlayer.real_y + (gamePlayer.rect.height / 2),
                     'angle': gamePlayer.angle,
                     'keys': input_keys,
                     'health': SETTINGS.player_health,
@@ -649,4 +646,3 @@ if __name__ == '__main__':
 
     #Run at last
     main_loop()
-

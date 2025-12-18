@@ -1,4 +1,4 @@
- #This is the player script. This is where the movement and collision detection of the player is.
+#This is the player script. This is where the movement and collision detection of the player is.
 
 import SETTINGS
 import EFFECTS
@@ -362,37 +362,41 @@ class RemotePlayer:
         SETTINGS.all_sprites.append(self.sprite)
 
     def update(self, data):
-            """Updates internal state with data received from the server."""
-            self.real_x = data.get('x', self.real_x)
-            self.real_y = data.get('y', self.real_y)
-            
-            # Sync physical and collision rects
-            self.rect.x = self.real_x
-            self.rect.y = self.real_y
-            self.rect.center = (self.real_x + SETTINGS.tile_size/2, self.real_y + SETTINGS.tile_size/2)
-            self.hit_rect = self.rect
-            
-            # Calculate grid position for engine logic
-            self.map_pos = [int(self.rect.centerx / SETTINGS.tile_size), int(self.rect.centery / SETTINGS.tile_size)]
-            
-            self.angle = data.get('angle', self.angle)
-            self.health = data.get('health', self.health)
-            
-            # Determine animation states based on server inputs
-            keys = data.get('keys', {})
-            self.moving = any(keys.values())
-            self.shooting = data.get('is_shooting', False)
-            
-            # FIX: Handle Death AND Respawn
-            if self.health <= 0:
-                self.dead = True
-                self.solid = False
-            elif self.health > 0 and self.dead:
-                # Player has respawned - reset states
-                self.dead = False
-                self.solid = False # Keep false for remote players to avoid collision bugs
-                self.current_frame = 0 # Reset animation loop so they don't look stuck
-                self.timer = 0
+        """Updates internal state with data received from the server."""
+        # CHANGE: Interpret received x/y as Center coordinates
+        center_x = data.get('x', self.real_x + (self.rect.width / 2))
+        center_y = data.get('y', self.real_y + (self.rect.height / 2))
+
+        # Convert Center back to Top-Left for local rendering/logic
+        self.real_x = center_x - (self.rect.width / 2)
+        self.real_y = center_y - (self.rect.height / 2)
+        
+        # Sync physical and collision rects
+        self.rect.x = self.real_x
+        self.rect.y = self.real_y
+        self.rect.center = (center_x, center_y)
+        self.hit_rect = self.rect
+        
+        # Calculate grid position for engine logic
+        self.map_pos = [int(self.rect.centerx / SETTINGS.tile_size), int(self.rect.centery / SETTINGS.tile_size)]
+        
+        self.angle = data.get('angle', self.angle)
+        self.health = data.get('health', self.health)
+        
+        # Determine animation states based on server inputs
+        keys = data.get('keys', {})
+        self.moving = any(keys.values())
+        self.shooting = data.get('is_shooting', False)
+        
+        # Handle Death AND Respawn (Fix for invisible players)
+        if self.health <= 0:
+            self.dead = True
+            self.solid = False
+        elif self.health > 0 and self.dead:
+            self.dead = False
+            self.solid = False
+            self.current_frame = 0
+            self.timer = 0
 
     def think(self):
         """Calculates distance and relative angle for 3D rendering."""
