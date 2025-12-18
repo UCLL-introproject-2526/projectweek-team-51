@@ -574,6 +574,7 @@ def main_loop():
 
             elif SETTINGS.menu_showing and menuController.current_type == 'game':
                 menuController.control()
+                gameCanvas.present()
                 
             else:
                 #Update logic
