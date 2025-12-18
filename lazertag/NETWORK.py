@@ -51,6 +51,10 @@ class Network:
                     your_id = msg.get("your_id")
                     if your_id is not None:
                         SETTINGS.my_id = your_id
+                    scores = msg.get("scores")
+                    if scores:
+                        SETTINGS.team_kills['green'] = scores.get("0", 0)
+                        SETTINGS.team_kills['orange'] = scores.get("1", 0)
         except Exception:
             pass
         finally:
