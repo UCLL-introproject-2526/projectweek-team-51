@@ -723,20 +723,13 @@ def main_loop():
                         "weapon": SETTINGS.current_gun.name if SETTINGS.current_gun else "None"
                     }
                     remote_server_data = gameNetwork.send(player_data_to_send)
-                
-                # Check if we got disconnected
-                if SETTINGS.is_multiplayer and gameNetwork and not gameNetwork.connected:
-                    print("[LASER TAG] Lost connection to server, returning to menu...")
-                    SETTINGS.menu_showing = True
-                    menuController.current_menu = 'main'
-                    game_started = False
-                    continue
-
+                    
+                    # Process remote players
                     current_remote_ids = set()
                     if remote_server_data:
                         for p_data in remote_server_data:
                             p_id = p_data.get('id')
-                            if p_id is None or p_id == getattr(SETTINGS, 'my_id', None):
+                            if p_id is None:
                                 continue
 
                             current_remote_ids.add(p_id)
@@ -758,13 +751,21 @@ def main_loop():
                                 player_npc.health = p_data['health']
                                 player_npc.state = 'idle' 
 
-                    disconnected_ids = set(remote_players.keys()) - current_remote_ids
-                    for p_id in disconnected_ids:
-                        print(f"[NETWORK] Player {p_id} left.")
-                        if p_id in remote_players:
-                            del remote_players[p_id]
+                        disconnected_ids = set(remote_players.keys()) - current_remote_ids
+                        for p_id in disconnected_ids:
+                            print(f"[NETWORK] Player {p_id} left.")
+                            if p_id in remote_players:
+                                del remote_players[p_id]
 
-                    SETTINGS.npc_list = list(remote_players.values())
+                        SETTINGS.npc_list = list(remote_players.values())
+                
+                # Check if we got disconnected
+                if SETTINGS.is_multiplayer and gameNetwork and not gameNetwork.connected:
+                    print("[LASER TAG] Lost connection to server, returning to menu...")
+                    SETTINGS.menu_showing = True
+                    menuController.current_menu = 'main'
+                    game_started = False
+                    continue
                 
                 # --- SOLO: NPCs behave normally (orange team enemies) ---
                 # If not multiplayer, SETTINGS.npc_list already contains orange NPCs from level load

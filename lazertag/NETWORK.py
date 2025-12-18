@@ -175,20 +175,35 @@ class Network:
         players = state.get("players", [])
         out = []
         
+        # DEBUG: Show all players from server
+        if players:
+            player_ids = [p.get("id") for p in players]
+            my_id = getattr(SETTINGS, 'my_id', None)
+            print(f"[NETWORK DEBUG] Server sent {len(players)} players: {player_ids}, my_id={my_id}")
+        
         for p in players:
             try:
                 p_id = p.get("id")
                 
+                # DEBUG: Show player processing
+                is_me = hasattr(SETTINGS, 'my_id') and p_id == SETTINGS.my_id
+                is_alive = p.get("alive", True)
+                print(f"[NETWORK DEBUG] Player {p_id}: is_me={is_me}, alive={is_alive}")
+                
                 # Skip ourselves - we control our own player locally
-                if hasattr(SETTINGS, 'my_id') and p_id == SETTINGS.my_id:
+                if is_me:
+                    print(f"[NETWORK DEBUG] Skipping player {p_id} (it's us)")
                     continue
                 
                 # Skip dead players
-                if not p.get("alive", True):
+                if not is_alive:
+                    print(f"[NETWORK DEBUG] Skipping player {p_id} (dead)")
                     continue
                 
                 team_idx = p.get("team", 0)
                 team_str = "green" if team_idx == 0 else "orange"
+                
+                print(f"[NETWORK DEBUG] Adding player {p_id} to render list (team={team_str})")
                 
                 out.append({
                     "id": p_id,
@@ -207,4 +222,5 @@ class Network:
                 print(f"[NETWORK] Error parsing player {p_id}: {e}")
                 continue
         
+        print(f"[NETWORK DEBUG] Returning {len(out)} players to render")
         return out
