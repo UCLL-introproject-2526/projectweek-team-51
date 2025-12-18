@@ -204,14 +204,34 @@ class Canvas:
         import os
         os.environ['SDL_VIDEO_CENTERED'] = '1'
 
-        if SETTINGS.fullscreen:
-            self.window = pygame.display.set_mode((self.width, int(self.height+(self.height*0.15))), pygame.FULLSCREEN)
-        else:
-            self.window = pygame.display.set_mode((self.width, int(self.height+(self.height*0.15))))
-        self.canvas = pygame.Surface((self.width, self.height))
+        # Window size includes render surface (canvas + HUD)
+        render_width = self.width
+        render_height = int(self.height + (self.height * 0.15))
 
+        window_width = render_width
+        window_height = render_height
+
+        # Create window
+        self.window = pygame.display.set_mode((window_width, window_height), 0)
+
+        # No need for manual scaling calculations - pygame.SCALED handles it automatically!
+        self.display_width = self.width
+        self.display_height = int(self.height+(self.height*0.15))
+        self.scaled_width = self.width
+        self.scaled_height = int(self.height+(self.height*0.15))
+        self.offset_x = 0
+        self.offset_y = 0
+
+        self.canvas = pygame.Surface((self.width, self.height))
         pygame.display.set_caption("Lazer Tag")
 
+        # Create render surface for HUD
+        self.render_surface = pygame.Surface((self.width, int(self.height + (self.height * 0.15))))
+
+        # Initialize scaling attributes
+        self.scale_factor = 1.0
+        self.offset_x = 0
+        self.offset_y = 0
 
         self.shade = [pygame.Surface((self.width, self.height)).convert_alpha(),
                       pygame.Surface((self.width, self.height/1.2)).convert_alpha(),
@@ -263,6 +283,23 @@ class Canvas:
 
         else:
             self.window.fill(SETTINGS.WHITE)
+
+    def present(self):
+        """Display render surface directly - no scaling"""
+        # Window matches render surface size exactly
+        self.scale_factor = 1.0
+        self.offset_x = 0
+        self.offset_y = 0
+
+        self.window.blit(self.render_surface, (0, 0))
+
+    def get_scaled_mouse_pos(self):
+        """Convert window mouse position to canvas coordinates"""
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        # Adjust for offset and scaling
+        canvas_x = (mouse_x - self.offset_x) / self.scale_factor
+        canvas_y = (mouse_y - self.offset_y) / self.scale_factor
+        return (canvas_x, canvas_y)
 
 def sort_distance(x):
     if x == None:
@@ -347,9 +384,11 @@ def render_screen(canvas):
 
     SETTINGS.zbuffer = []
 
-    #Draw HUD and canvas
-    gameCanvas.window.blit(canvas, (SETTINGS.axes))
-    gameHUD.render(gameCanvas.window)
+    #Draw HUD and canvas to render surface
+    gameCanvas.render_surface.blit(canvas, (SETTINGS.axes))
+    gameHUD.render(gameCanvas.render_surface)
+    # Present to display with proper scaling
+    gameCanvas.present()
 
 def update_game():
     if SETTINGS.npc_list:
@@ -375,7 +414,7 @@ def update_game():
 
     # Display win message and return to menu
     if SETTINGS.game_won and gameLoad.timer < 4:
-        text.draw(gameCanvas.window)
+        text.draw(gameCanvas.render_surface)
         gameLoad.timer += SETTINGS.dt
     elif SETTINGS.game_won and gameLoad.timer >= 4:
         # Reset everything and go back to menu
@@ -395,7 +434,7 @@ def update_game():
         if gameLoad.timer < 2:  # Show death screen for 2 seconds
             if text.string != 'RESPAWNING...':
                 text.update_string('RESPAWNING...')
-            text.draw(gameCanvas.window)
+            text.draw(gameCanvas.render_surface)
             gameLoad.timer += SETTINGS.dt
         else:
             # Respawn player at their team's spawn point
@@ -429,7 +468,7 @@ def update_game():
         elif SETTINGS.current_level == len(SETTINGS.levels_list)-1 and gameLoad.timer < 4 and not SETTINGS.player_states['fade']:
             if text.string != 'YOU  WON':
                 text.update_string('YOU  WON')
-            text.draw(gameCanvas.window)
+            text.draw(gameCanvas.render_surface)
             if not SETTINGS.game_won:
                 gameLoad.timer = 0
             SETTINGS.game_won = True
@@ -507,8 +546,8 @@ def main_loop():
             musicController.control_music()
             
             if SETTINGS.menu_showing and menuController.current_type == 'main':
-                gameCanvas.window.fill(SETTINGS.WHITE)
                 menuController.control()
+                gameCanvas.present()
 
                 #Load custom maps
                 if SETTINGS.playing_customs:
@@ -557,11 +596,11 @@ def main_loop():
                   #  beta.draw(gameCanvas.window)
                 
                 elif SETTINGS.mode == 0:
-                    gameMap.draw(gameCanvas.window)                
-                    gamePlayer.draw(gameCanvas.window)
+                    gameMap.draw(gameCanvas.render_surface)
+                    gamePlayer.draw(gameCanvas.render_surface)
 
                     for x in SETTINGS.raylines:
-                        pygame.draw.line(gameCanvas.window, SETTINGS.RED, (x[0][0]/4, x[0][1]/4), (x[1][0]/4, x[1][1]/4))
+                        pygame.draw.line(gameCanvas.render_surface, SETTINGS.RED, (x[0][0]/4, x[0][1]/4), (x[1][0]/4, x[1][1]/4))
                     SETTINGS.raylines = []
 
                     for i in SETTINGS.npc_list:
@@ -572,18 +611,20 @@ def main_loop():
                         # Use team colors on minimap for laser tag
                         npc_color = SETTINGS.team_colors.get(i.team, SETTINGS.RED)
                         if i.rect and i.dist <= SETTINGS.render * SETTINGS.tile_size * 1.2:
-                            pygame.draw.rect(gameCanvas.window, npc_color, (i.rect[0]/4, i.rect[1]/4, i.rect[2]/4, i.rect[3]/4))
+                            pygame.draw.rect(gameCanvas.render_surface, npc_color, (i.rect[0]/4, i.rect[1]/4, i.rect[2]/4, i.rect[3]/4))
                         elif i.rect:
                             # Darken the team color for distant NPCs
                             dark_color = tuple(max(0, c - 100) for c in npc_color)
-                            pygame.draw.rect(gameCanvas.window, dark_color, (i.rect[0]/4, i.rect[1]/4, i.rect[2]/4, i.rect[3]/4))
+                            pygame.draw.rect(gameCanvas.render_surface, dark_color, (i.rect[0]/4, i.rect[1]/4, i.rect[2]/4, i.rect[3]/4))
+
+                    gameCanvas.present()
 
                 update_game()
 
         except Exception as e:
             menuController.save_settings()
             calculate_statistics()
-            logging.warning("DUGA has crashed. Please send this report to MaxwellSalmon, so he can fix it.")
+            logging.warning("Lazertag has crashed.")
             logging.exception("Error message: ")
             pygame.quit()
             sys.exit(0)
@@ -619,8 +660,9 @@ if __name__ == '__main__':
     #Classes for later use
     gameMap = MAP.Map(SETTINGS.levels_list[SETTINGS.current_level].array)
     gameCanvas = Canvas(SETTINGS.canvas_map_width, SETTINGS.canvas_map_height)
+    SETTINGS.game_canvas = gameCanvas  # Make accessible for mouse coordinate conversion
     gamePlayer = PLAYER.Player(SETTINGS.player_pos)
-    gameRaycast = RAYCAST.Raycast(gameCanvas.canvas, gameCanvas.window)
+    gameRaycast = RAYCAST.Raycast(gameCanvas.canvas, gameCanvas.render_surface)
     # LASER TAG - Initialize with laser rifle and melee
     SETTINGS.current_gun = SETTINGS.gun_list[0]  # Laser rifle
     SETTINGS.inventory['primary'] = SETTINGS.gun_list[0]
@@ -634,7 +676,7 @@ if __name__ == '__main__':
     gameLoad.load_new_level()
 
     #Controller classes
-    menuController = MENU.Controller(gameCanvas.window)
+    menuController = MENU.Controller(gameCanvas.render_surface)
     musicController = MUSIC.Music()
 
     #Run at last

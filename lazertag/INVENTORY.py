@@ -125,12 +125,16 @@ class inventory:
         self.timer += SETTINGS.dt
 
         #Ammo text
-        if SETTINGS.held_ammo['bullet'] and not SETTINGS.inv_strings_updated:
-            self.ammotext[0].update_string('%s / %s' % (SETTINGS.held_ammo['bullet'], SETTINGS.max_ammo['bullet']))
-        if SETTINGS.held_ammo['shell'] and not SETTINGS.inv_strings_updated:
-            self.ammotext[1].update_string('%s / %s' % (SETTINGS.held_ammo['shell'], SETTINGS.max_ammo['shell']))
-        if SETTINGS.held_ammo['ferromag'] and not SETTINGS.inv_strings_updated:
-            self.ammotext[2].update_string('%s / %s' % (SETTINGS.held_ammo['ferromag'], SETTINGS.max_ammo['ferromag']))
+        # LASER TAG FIX - Check if ammo types exist before accessing
+        if 'bullet' in SETTINGS.held_ammo and SETTINGS.held_ammo['bullet'] and not SETTINGS.inv_strings_updated:
+            if 'bullet' in SETTINGS.max_ammo:
+                self.ammotext[0].update_string('%s / %s' % (SETTINGS.held_ammo['bullet'], SETTINGS.max_ammo['bullet']))
+        if 'shell' in SETTINGS.held_ammo and SETTINGS.held_ammo['shell'] and not SETTINGS.inv_strings_updated:
+            if 'shell' in SETTINGS.max_ammo:
+                self.ammotext[1].update_string('%s / %s' % (SETTINGS.held_ammo['shell'], SETTINGS.max_ammo['shell']))
+        if 'ferromag' in SETTINGS.held_ammo and SETTINGS.held_ammo['ferromag'] and not SETTINGS.inv_strings_updated:
+            if 'ferromag' in SETTINGS.max_ammo:
+                self.ammotext[2].update_string('%s / %s' % (SETTINGS.held_ammo['ferromag'], SETTINGS.max_ammo['ferromag']))
         for string in self.ammotext:
             string.draw(canvas)
         SETTINGS.inv_strings_updated = True
