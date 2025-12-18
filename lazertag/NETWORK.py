@@ -78,13 +78,12 @@ class Network:
 
     def send(self, data):
         """
-        Sends the local player input to the server using JSONL protocol.
-        Returns a list of player dicts based on the latest server state.
+        Sends local inputs and returns the fully parsed list of all players.
         """
         if not self.connected:
             return []
 
-        # Map local keys to server expected input booleans
+        # 1. Send Inputs
         keys = data.get("keys", {})
         msg = {
             "type": "input",
@@ -93,17 +92,14 @@ class Network:
             "left": bool(keys.get("a", False)),
             "right": bool(keys.get("d", False)),
             "shoot": bool(data.get("is_shooting", False)),
-            # Server currently reads aim_x into angle parameter due to positional usage.
-            # Send our aiming angle degrees via "aim_x" to match current server expectation.
             "aim_x": float(data.get("angle", 0.0)),
-            
-            # --- NEW: SEND X/Y COORDINATES ---
+            # Send X/Y only for debug/map checks (server ignores them for physics)
             "x": float(data.get("x", 0.0)),
             "y": float(data.get("y", 0.0))
         }
         self._send_json(msg)
 
-        # Transform latest state to the format MAIN expects
+        # 2. Receive and Parse State
         with self._state_lock:
             state = self._latest_state
         if not state:
@@ -115,12 +111,19 @@ class Network:
             try:
                 team_idx = p.get("team", 0)
                 team_str = "green" if team_idx == 0 else "orange"
+                
+                # --- NEW: Extract all the new server fields ---
                 out.append({
                     "id": p.get("id"),
                     "team": team_str,
                     "x": p.get("x", 0.0),
                     "y": p.get("y", 0.0),
                     "angle": p.get("angle", 0.0),
+                    "health": p.get("health", 100),         # NEW
+                    "is_shooting": p.get("is_shooting", False), # NEW
+                    "keys": p.get("keys", {}),              # NEW
+                    "hits": p.get("hits", []),              # NEW
+                    "alive": p.get("alive", True)
                 })
             except Exception:
                 continue

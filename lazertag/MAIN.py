@@ -429,18 +429,21 @@ def main_loop():
     logging.basicConfig(filename=os.path.join('data', 'CrashReport.log'), level=logging.WARNING)
 
     # --- INITIALIZE NETWORK ---
+    # Attempts to connect to the server immediately upon game start
     net = NETWORK.Network()
 
     while not game_exit:
+        # Reset the Z-Buffer (depth buffer) for the new frame
         SETTINGS.zbuffer = []
-        # Update Playtime
+        
+        # Track playtime for statistics
         if SETTINGS.play_seconds >= 60:
             SETTINGS.statistics['playtime'] += 1
             SETTINGS.play_seconds = 0
         else:
             SETTINGS.play_seconds += SETTINGS.dt
 
-        # Event Handling
+        # --- EVENT LOOP ---
         for event in pygame.event.get():
             if event.type == pygame.QUIT or SETTINGS.quit_game:
                 game_exit = True
@@ -450,20 +453,20 @@ def main_loop():
 
         try:
             # =========================================================
-            # MULTIPLAYER SYNC LOGIC
+            # MULTIPLAYER NETWORK LOGIC
             # =========================================================
             if net.connected and not SETTINGS.menu_showing:
                 
                 # 1. Gather Input Keys (For Animation Sync)
                 keys = pygame.key.get_pressed()
                 input_keys = {
-                    'w': keys[pygame.K_w], 
+                    'w': keys[pygame.K_w],
                     'a': keys[pygame.K_a],
-                    's': keys[pygame.K_s], 
+                    's': keys[pygame.K_s],
                     'd': keys[pygame.K_d]
                 }
 
-                # 2. Package Data
+                # 2. Package Local Data to Send
                 local_data = {
                     'id': SETTINGS.my_id,
                     'team': SETTINGS.player_team,
@@ -476,53 +479,79 @@ def main_loop():
                     'weapon': SETTINGS.current_gun.name if SETTINGS.current_gun else 'None'
                 }
 
-                # 3. Send to Server & Receive Updates
-                # This function sends our dict and returns a list of all other players
-                server_data = net.send(local_data)
+                # 3. Send to Server & Receive Response
+                # This sends your data and returns a list of ALL players from the server
+                remote_data_list = net.send(local_data)
 
-                # 4. Process Received Data
-                current_server_ids = []
+                # 4. PRINT RECEIVED DATA (DEBUGGING)
+                # This prints the JSON packet from the server to your console every frame
+                if len(remote_data_list) > 0:
+                    print(f"\n[CLIENT] Received State at {pygame.time.get_ticks()}ms:")
+                    for p in remote_data_list:
+                        role = "ME" if p['id'] == SETTINGS.my_id else f"ENEMY ({p['id']})"
+                        # Safely get values with defaults to prevent errors if keys are missing
+                        hp = p.get('health', 100)
+                        shoot = p.get('is_shooting', False)
+                        p_keys = list(p.get('keys', {}).values())
+                        hits = p.get('hits', [])
+                        print(f"  > {role}: HP={hp} | Shoot={shoot} | Keys={p_keys} | Hits={hits}")
+
+                # 5. Process Remote Players
+                active_remote_ids = []
                 
-                for p_data in server_data:
+                for p_data in remote_data_list:
                     p_id = p_data['id']
                     
-                    # Skip our own data
+                    # Handle Self (Sync Health)
                     if p_id == SETTINGS.my_id:
+                        # Server is authoritative on health, so we update ours
+                        SETTINGS.player_health = p_data.get('health', SETTINGS.player_health)
                         continue
                         
-                    current_server_ids.append(p_id)
-
+                    active_remote_ids.append(p_id)
+                    
+                    # Handle Others (Update or Create)
                     if p_id in SETTINGS.remote_players:
-                        # UPDATE existing player
                         SETTINGS.remote_players[p_id].update(p_data)
                     else:
-                        # CREATE new player
-                        new_player = PLAYER.RemotePlayer(p_id, p_data['team'])
-                        SETTINGS.remote_players[p_id] = new_player
-
-                # 5. Clean up disconnected players
-                # If a player is in our list but not in the server response, they disconnected
-                disconnected = [pid for pid in SETTINGS.remote_players if pid not in current_server_ids]
-                for pid in disconnected:
-                    # Remove from render list
-                    if SETTINGS.remote_players[pid] in SETTINGS.npc_list:
-                        SETTINGS.npc_list.remove(SETTINGS.remote_players[pid])
-                    del SETTINGS.remote_players[pid]
+                        # Create new remote player entity
+                        new_rp = PLAYER.RemotePlayer(p_id, p_data['team'])
+                        new_rp.update(p_data) # Set initial position immediately
+                        SETTINGS.remote_players[p_id] = new_rp
+                        # Add to rendering list
+                        SETTINGS.npc_list.append(new_rp)
+                        
+                # 6. Cleanup Disconnected Players
+                # If a player is in our local list but not in the server update, they left
+                disconnected_ids = [rid for rid in SETTINGS.remote_players if rid not in active_remote_ids]
+                for rid in disconnected_ids:
+                    rp = SETTINGS.remote_players[rid]
+                    
+                    # Remove from NPC render list
+                    if rp in SETTINGS.npc_list:
+                        SETTINGS.npc_list.remove(rp)
+                    
+                    # Remove sprite from 2.5D engine list (Crucial to prevent crashes)
+                    if hasattr(rp, 'sprite') and rp.sprite in SETTINGS.all_sprites:
+                        SETTINGS.all_sprites.remove(rp.sprite)
+                        
+                    del SETTINGS.remote_players[rid]
             # =========================================================
 
-            # Music & Menu Logic
+            # --- STANDARD GAME LOOP ---
             musicController.control_music()
             
+            # Menu Logic
             if SETTINGS.menu_showing and menuController.current_type == 'main':
                 gameCanvas.window.fill(SETTINGS.WHITE)
                 menuController.control()
-                # (Keep your existing map loading logic here...)
+                
+                # Level Loading (Original Logic)
                 if SETTINGS.playing_customs:
                     SETTINGS.levels_list = SETTINGS.clevels_list
                     gameLoad.get_canvas_size()
                     gameLoad.load_new_level()
                 elif SETTINGS.playing_new:
-                    # LASER TAG - Use the same arena map
                     SETTINGS.levels_list = SETTINGS.glevels_list
                     gameLoad.get_canvas_size()
                     gameLoad.load_new_level()
@@ -540,18 +569,18 @@ def main_loop():
                 
                 if SETTINGS.switch_mode: gameCanvas.change_mode()
 
-                # Render
+                # Render 3D View
                 gameRaycast.calculate()
                 gameCanvas.draw()
                 
                 if SETTINGS.mode == 1:
                     render_screen(gameCanvas.canvas)
                 elif SETTINGS.mode == 0:
+                    # Render 2D Map
                     gameMap.draw(gameCanvas.window)                
                     gamePlayer.draw(gameCanvas.window)
                     # Draw Remote Players on Map
                     for npc in SETTINGS.npc_list:
-                        # Only draw if it's a RemotePlayer (checking type attribute safely)
                         if getattr(npc, 'type', 'npc') == 'remote':
                             c = SETTINGS.team_colors.get(npc.team, SETTINGS.RED)
                             pygame.draw.rect(gameCanvas.window, c, (npc.rect[0]/4, npc.rect[1]/4, npc.rect[2]/4, npc.rect[3]/4))
@@ -561,6 +590,7 @@ def main_loop():
         except Exception as e:
             menuController.save_settings()
             logging.exception("Error message: ")
+            print(f"CRASH: {e}") # Print error to console so you can see it
             pygame.quit()
             sys.exit(0)
 
@@ -568,6 +598,7 @@ def main_loop():
         delta_time = clock.tick(SETTINGS.fps)
         SETTINGS.dt = delta_time / 1000.0
         SETTINGS.cfps = int(clock.get_fps())
+
 
 #Probably temporary object init
 #SETTINGS.current_level = 5 #temporary
