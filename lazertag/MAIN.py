@@ -584,42 +584,49 @@ def main_loop():
                 
                 else:
                     print("[LASER TAG] Successfully connected to multiplayer server!")
+                    
+                    # Give reader thread time to start
                     import time
-                    time.sleep(0.1)  # Give the reader thread time to get server data
+                    time.sleep(0.05)
                     
-                    # Check if there are other players already in the game
-                    with gameNetwork._state_lock:
-                        initial_state = gameNetwork._latest_state
+                    # Send initial input to establish connection with server
+                    initial_input = {
+                        "type": "input",
+                        "up": False,
+                        "down": False,
+                        "left": False,
+                        "right": False,
+                        "shoot": False,
+                        "aim_x": 0.0,
+                        "x": 0.0,
+                        "y": 0.0,
+                        "weapon": "None"
+                    }
+                    if gameNetwork._send_json(initial_input):
+                        print("[LASER TAG] Initial message sent to server")
+                    else:
+                        print("[LASER TAG] Failed to send initial message")
                     
-                    if initial_state:
-                        players = initial_state.get("players", [])
-                        scores = initial_state.get("scores", {})
-                        
-                        # If we're the only player (or first player), reset the match
-                        if len(players) <= 1:  # Just us or empty
-                            print("[LASER TAG] No other players - starting fresh match")
-                            SETTINGS.team_kills['green'] = 0
-                            SETTINGS.team_kills['orange'] = 0
-                            SETTINGS.game_won = False
-                            SETTINGS.game_winner = None
-                            gameLoad.timer = 0
-                        else:
-                            print(f"[LASER TAG] Joining game in progress - {len(players)} players online")
-                            # Keep the scores from server
-                            SETTINGS.team_kills['green'] = scores.get("0", 0)
-                            SETTINGS.team_kills['orange'] = scores.get("1", 0)
+                    # Always start with fresh scores when connecting
+                    # The server will update them if there's an ongoing game
+                    SETTINGS.team_kills['green'] = 0
+                    SETTINGS.team_kills['orange'] = 0
+                    SETTINGS.game_won = False
+                    SETTINGS.game_winner = None
+                    gameLoad.timer = 0
+                    print("[LASER TAG] Waiting for game state from server...")
             
             else:
                 # SOLO PATH: Not multiplayer, ensure no connection
                 print("[LASER TAG] Starting solo laser tag...")
                 gameNetwork = None
                 
-                # Reset scores for solo play
-                SETTINGS.team_kills['green'] = 0
-                SETTINGS.team_kills['orange'] = 0
+                # FORCE reset scores for solo play (override any multiplayer state)
+                SETTINGS.team_kills = {'green': 0, 'orange': 0}  # Recreate dict
                 SETTINGS.game_won = False
                 SETTINGS.game_winner = None
                 gameLoad.timer = 0
+                print("[LASER TAG] Scores reset for solo mode: GREEN 0 - ORANGE 0")
             
             # Initialize game (both multiplayer and solo)
             print("DEBUG: Game starting...")
@@ -716,6 +723,14 @@ def main_loop():
                         "weapon": SETTINGS.current_gun.name if SETTINGS.current_gun else "None"
                     }
                     remote_server_data = gameNetwork.send(player_data_to_send)
+                
+                # Check if we got disconnected
+                if SETTINGS.is_multiplayer and gameNetwork and not gameNetwork.connected:
+                    print("[LASER TAG] Lost connection to server, returning to menu...")
+                    SETTINGS.menu_showing = True
+                    menuController.current_menu = 'main'
+                    game_started = False
+                    continue
 
                     current_remote_ids = set()
                     if remote_server_data:
