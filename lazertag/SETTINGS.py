@@ -7,7 +7,7 @@ caption = "Lazer Tag v1.0"
 mode = 1
 volume = 1
 music_volume = 1
-fullscreen = True
+fullscreen = False
 menu_showing = True
 #Below this point are the non-configurable game variables.
 current_level_size = None

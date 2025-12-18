@@ -3,6 +3,7 @@ import pickle
 import os
 import copy
 import random
+import math
 import SETTINGS
 import TEXT
 import SOUND
@@ -129,6 +130,81 @@ class Menu:
         self.background_image = None
 
 
+class Particle:
+    def __init__(self, x, y, color, speed_x, speed_y):
+        self.x = x
+        self.y = y
+        self.color = color
+        self.speed_x = speed_x
+        self.speed_y = speed_y
+        self.size = random.randint(1, 3)
+        self.lifetime = random.randint(60, 120)
+        self.age = 0
+
+    def update(self):
+        self.x += self.speed_x
+        self.y += self.speed_y
+        self.age += 1
+        return self.age < self.lifetime
+
+    def draw(self, canvas):
+        alpha = int(255 * (1 - self.age / self.lifetime))
+        surf = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
+        pygame.draw.circle(surf, (*self.color, alpha), (self.size, self.size), self.size)
+        canvas.blit(surf, (int(self.x), int(self.y)))
+
+
+class LaserBeam:
+    def __init__(self, start_x, start_y, end_x, end_y, color):
+        self.start_x = start_x
+        self.start_y = start_y
+        self.end_x = end_x
+        self.end_y = end_y
+        self.color = color
+        self.lifetime = random.randint(15, 40)  # Last longer
+        self.age = 0
+        self.width = random.randint(3, 5)  # Thicker beams
+
+    def update(self):
+        self.age += 1
+        return self.age < self.lifetime
+
+    def draw(self, canvas):
+        alpha = int(200 * (1 - self.age / self.lifetime))
+        # Calculate bounding box for the line
+        min_x = int(min(self.start_x, self.end_x))
+        max_x = int(max(self.start_x, self.end_x))
+        min_y = int(min(self.start_y, self.end_y))
+        max_y = int(max(self.start_y, self.end_y))
+        width = max(max_x - min_x + 20, 20)
+        height = max(max_y - min_y + 20, 20)
+
+        # Create smaller surface just for this beam
+        beam_surf = pygame.Surface((width, height), pygame.SRCALPHA)
+
+        # Adjust coordinates relative to surface
+        start_x_rel = int(self.start_x - min_x + 10)
+        start_y_rel = int(self.start_y - min_y + 10)
+        end_x_rel = int(self.end_x - min_x + 10)
+        end_y_rel = int(self.end_y - min_y + 10)
+
+        # Draw glow layers
+        for i in range(3, 0, -1):
+            glow_alpha = alpha // (4 - i)
+            pygame.draw.line(beam_surf, (*self.color, min(255, glow_alpha)),
+                           (start_x_rel, start_y_rel),
+                           (end_x_rel, end_y_rel),
+                           self.width + i * 2)
+        # Draw core beam
+        pygame.draw.line(beam_surf, (*self.color, min(255, alpha)),
+                       (start_x_rel, start_y_rel),
+                       (end_x_rel, end_y_rel),
+                       self.width)
+
+        # Blit to canvas
+        canvas.blit(beam_surf, (min_x - 10, min_y - 10))
+
+
 class MainMenu(Menu):
 
     def __init__(self):
@@ -143,31 +219,74 @@ class MainMenu(Menu):
 
         self.logo_surface = pygame.Surface(self.logo.get_size()).convert_alpha()
         self.logo_surface_rect = self.logo_surface.get_rect()
-        self.logo_surface_rect.center = (SETTINGS.canvas_actual_width/2, 90)
-        
-        # LASER TAG - Use only the textures we have
-        laser_wall = pygame.image.load(os.path.join('graphics', 'tiles', 'walls', 'wall_pattern.jpg')).convert()
-        mid_wall = pygame.image.load(os.path.join('graphics', 'tiles', 'walls', 'mid_walls.png')).convert()
+        self.logo_surface_rect.center = (SETTINGS.canvas_actual_width/2, 180)
 
-        self.laser_tiles = [[laser_wall, self.logo_surface_rect.left],
-                      [mid_wall, self.logo_surface_rect.left + 160],
-                      [laser_wall, self.logo_surface_rect.left + (2*160)],
-                      [laser_wall, self.logo_surface_rect.left + (3*160)],
-                      [mid_wall, self.logo_surface_rect.left + (4*160)],
-                      [laser_wall, self.logo_surface_rect.left + (5*160)],
-                      [laser_wall, self.logo_surface_rect.left + (6*160)],
-                      [laser_wall, self.logo_surface_rect.left + (7*160)],
-                      [laser_wall, self.logo_surface_rect.left + (8*160)]]
+        # Load NPC sprites for animation
+        try:
+            self.green_npc = pygame.image.load(os.path.join('graphics', 'npc', 'green_team_player.png')).convert_alpha()
+            self.orange_npc = pygame.image.load(os.path.join('graphics', 'npc', 'orange_team_player.png')).convert_alpha()
+            # Scale NPCs to appropriate size
+            npc_size = 120
+            self.green_npc = pygame.transform.scale(self.green_npc, (npc_size, npc_size))
+            self.orange_npc = pygame.transform.scale(self.orange_npc, (npc_size, npc_size))
+        except:
+            self.green_npc = None
+            self.orange_npc = None
 
-        self.tiles = self.laser_tiles
-                    
-        
-        for i in range(len(self.tiles)):
-            self.tiles[i][0] = pygame.transform.scale(self.tiles[i][0], (160,160)) #??
+        # NPC animation positions
+        self.npc_timer = 0
+        self.green_npc_pos = [50, SETTINGS.canvas_target_height - 150]
+        self.orange_npc_pos = [SETTINGS.canvas_actual_width - 170, SETTINGS.canvas_target_height - 150]
+
+        # Particle system - laser beams
+        self.particles = []
+        self.particle_spawn_timer = 0
+
+        # Laser beams shooting across screen
+        self.laser_beams = []
+        self.laser_spawn_timer = 0
+
+        # Animated background - grid lines for laser tag arena feel
+        self.bg_offset = 0
+        self.grid_offset_x = 0
+        self.grid_offset_y = 0
+
+        # "LASER TAG ARENA" subtitle
+        self.subtitle = TEXT.Text(0, 0, "ARENA  MODE", SETTINGS.team_colors['green'], "DUGAFONT.ttf", 32)
+        self.subtitle.update_pos((SETTINGS.canvas_actual_width/2) - (self.subtitle.layout.get_width()/2), 180)
 
     def draw(self, canvas):
-        # LASER TAG - Add dark background with gradient effect
-        canvas.fill((20, 20, 25))  # Very dark blue-gray background
+        # Solid black background - clean and simple
+        canvas.fill((0, 0, 0))
+
+        # Spawn laser beams shooting from logo center outward
+        self.laser_spawn_timer += 1
+        if self.laser_spawn_timer > 30:  # Moderate spawn rate
+            if random.random() > 0.5:  # 50% chance
+                color = SETTINGS.team_colors['green'] if random.random() > 0.5 else SETTINGS.team_colors['orange']
+                # Start from logo center
+                start_x = SETTINGS.canvas_actual_width // 2
+                start_y = 140  # Logo center height
+
+                # Random direction outward
+                angle = random.uniform(0, 360)
+                distance = random.randint(50,150)
+                end_x = start_x + int(distance * math.cos(math.radians(angle)))
+                end_y = start_y + int(distance * math.sin(math.radians(angle)))
+
+                # Keep end points on screen
+                end_x = max(0, min(SETTINGS.canvas_actual_width, end_x))
+                end_y = max(0, min(SETTINGS.canvas_target_height, end_y))
+
+                self.laser_beams.append(LaserBeam(start_x, start_y, end_x, end_y, color))
+            self.laser_spawn_timer = 0
+
+        # Update and draw laser beams
+        self.laser_beams = [beam for beam in self.laser_beams if beam.update()]
+        for beam in self.laser_beams:
+            beam.draw(canvas)
+
+        # Clean design - no particles, NPCs, or subtitle
 
         self.logo_animation(canvas)
 
@@ -177,9 +296,36 @@ class MainMenu(Menu):
         self.quit_button.draw(canvas)
 
     def logo_animation(self, canvas):
-        # LASER TAG - Simple glowing logo effect
-        # Draw the logo directly with a subtle glow
+        # Subtle glowing logo effect - laser tag style
+        glow_pulse = abs(pygame.math.Vector2(1, 0).rotate(pygame.time.get_ticks() * 0.08).x)
+        glow_size = int(glow_pulse * 10 + 8)
+
+        # Subtle background glow - only 3 layers
+        for i in range(3):
+            glow_radius = glow_size * (3 - i) + i * 5
+            glow_surface = pygame.Surface((self.logo.get_width() + glow_radius * 2, self.logo.get_height() + glow_radius * 2), pygame.SRCALPHA)
+
+            # Alternate between green and orange glow layers - subtler
+            if i % 2 == 0:
+                color = (0, 255, 0, 60 - i * 15)
+            else:
+                color = (255, 140, 0, 60 - i * 15)
+
+            # Draw filled rectangle glow
+            pygame.draw.rect(glow_surface, color, glow_surface.get_rect(), border_radius=20)
+
+            glow_rect = glow_surface.get_rect()
+            glow_rect.center = self.logo_surface_rect.center
+            canvas.blit(glow_surface, glow_rect)
+
+        # Draw main logo
         canvas.blit(self.logo, self.logo_surface_rect)
+
+        # Add subtle scan line effect across logo
+        scan_y = int((pygame.time.get_ticks() * 0.3) % self.logo.get_height())
+        scan_surf = pygame.Surface((self.logo.get_width(), 2), pygame.SRCALPHA)
+        scan_surf.fill((255, 255, 255, 60))
+        canvas.blit(scan_surf, (self.logo_surface_rect.x, self.logo_surface_rect.y + scan_y))
         
         
 
@@ -201,12 +347,45 @@ class NewMenu(Menu):
         self.settings = settings
 
     def draw(self, canvas):
-        # LASER TAG - Add dark background with gradient effect
-        canvas.fill((20, 20, 25))  # Very dark blue-gray background
+        # Dark arena background with grid
+        canvas.fill((5, 5, 15))
+
+        # Animated grid effect
+        grid_offset = (pygame.time.get_ticks() * 0.02) % 40
+        grid_surf = pygame.Surface((SETTINGS.canvas_actual_width, SETTINGS.canvas_target_height), pygame.SRCALPHA)
+
+        # Grid lines
+        for i in range(0, SETTINGS.canvas_target_height, 40):
+            y_pos = int((i + grid_offset) % SETTINGS.canvas_target_height)
+            pygame.draw.line(grid_surf, (0, 100, 0, 40), (0, y_pos), (SETTINGS.canvas_actual_width, y_pos), 1)
+
+        for i in range(0, SETTINGS.canvas_actual_width, 40):
+            pygame.draw.line(grid_surf, (100, 50, 0, 30), (i, 0), (i, SETTINGS.canvas_target_height), 1)
+
+        canvas.blit(grid_surf, (0, 0))
+
+        # Add animated accent lines (laser sweep effect)
+        line_offset = (pygame.time.get_ticks() * 0.05) % SETTINGS.canvas_target_height
+        for i in range(3):
+            y_pos = int((line_offset + i * (SETTINGS.canvas_target_height / 3)) % SETTINGS.canvas_target_height)
+            alpha_surf = pygame.Surface((SETTINGS.canvas_actual_width, 3), pygame.SRCALPHA)
+            color = SETTINGS.team_colors['green'] if i % 2 == 0 else SETTINGS.team_colors['orange']
+            # Draw glow
+            for j in range(3, 0, -1):
+                pygame.draw.line(alpha_surf, (*color, 60 // j), (0, 1), (SETTINGS.canvas_actual_width, 1), j)
+            canvas.blit(alpha_surf, (0, y_pos))
 
         self.new_button.draw(canvas)
         self.tutorial_button.draw(canvas)
         self.back_button.draw(canvas)
+
+        # Draw title with glow effect
+        title_glow = pygame.Surface((self.title.layout.get_width() + 40, self.title.layout.get_height() + 20), pygame.SRCALPHA)
+        pulse = abs(pygame.math.Vector2(1, 0).rotate(pygame.time.get_ticks() * 0.1).x)
+        for i in range(3):
+            pygame.draw.rect(title_glow, (0, 200, 0, int(40 * pulse) // (i + 1)),
+                           title_glow.get_rect(), border_radius=8)
+        canvas.blit(title_glow, (self.title.posx - 20, self.title.posy - 10))
         self.title.draw(canvas)
 
         if self.no_levels_on:
@@ -275,14 +454,17 @@ class OptionsMenu(Menu):
         
         self.strings_to_data = {
             #'graphics' : [(resolution, render), (), ()]
-            'graphics' : [(100, 10), (140, 12), (175, 14)],
+            'graphics' : [(128, 10), (160, 12), (320, 14)],
             'fov' : [50, 60, 70],
             'sensitivity' : [0.15, 0.25, 0.35], #Tjek den her
             'volume' : [0.1, 0.5, 1],
             'music volume' : [0, 0.5, 1],
             'fullscreen' : [True, False],}
 
-        self.graphics_index = self.strings_to_data['graphics'].index(settings['graphics'])
+        try:
+            self.graphics_index = self.strings_to_data['graphics'].index(settings['graphics'])
+        except ValueError:
+            self.graphics_index = 1 #Default to medium settings
         self.fov_index = self.strings_to_data['fov'].index(settings['fov'])
         self.sens_index = self.strings_to_data['sensitivity'].index(settings['sensitivity'])
         self.vol_index = self.strings_to_data['volume'].index(settings['volume'])
@@ -354,8 +536,16 @@ class OptionsMenu(Menu):
             
 
     def draw(self, canvas):
-        # LASER TAG - Add dark background with gradient effect
-        canvas.fill((20, 20, 25))  # Very dark blue-gray background
+        # Dark arena background with subtle grid
+        canvas.fill((5, 5, 15))
+
+        # Subtle grid pattern
+        grid_surf = pygame.Surface((SETTINGS.canvas_actual_width, SETTINGS.canvas_target_height), pygame.SRCALPHA)
+        for i in range(0, SETTINGS.canvas_target_height, 50):
+            pygame.draw.line(grid_surf, (0, 80, 0, 20), (0, i), (SETTINGS.canvas_actual_width, i), 1)
+        for i in range(0, SETTINGS.canvas_actual_width, 50):
+            pygame.draw.line(grid_surf, (80, 40, 0, 15), (i, 0), (i, SETTINGS.canvas_target_height), 1)
+        canvas.blit(grid_surf, (0, 0))
 
         self.graphics_button.draw(canvas)
         self.fov_button.draw(canvas)
@@ -364,6 +554,12 @@ class OptionsMenu(Menu):
         self.music_button.draw(canvas)
         self.fullscreen_button.draw(canvas)
         self.back_button.draw(canvas)
+
+        # Draw title with glow
+        title_glow = pygame.Surface((self.title.layout.get_width() + 40, self.title.layout.get_height() + 20), pygame.SRCALPHA)
+        for i in range(3):
+            pygame.draw.rect(title_glow, (0, 150, 0, 30 // (i + 1)), title_glow.get_rect(), border_radius=8)
+        canvas.blit(title_glow, (self.title.posx - 20, self.title.posy - 10))
         self.title.draw(canvas)
         self.restart.draw(canvas)
 
@@ -459,11 +655,25 @@ class ScoreMenu(Menu):
         if self.score_testing != SETTINGS.statistics:
             self.__init__()
 
-        # LASER TAG - Add dark background with gradient effect
-        canvas.fill((20, 20, 25))  # Very dark blue-gray background
+        # Dark arena background with subtle grid
+        canvas.fill((5, 5, 15))
 
+        # Subtle grid pattern
+        grid_surf = pygame.Surface((SETTINGS.canvas_actual_width, SETTINGS.canvas_target_height), pygame.SRCALPHA)
+        for i in range(0, SETTINGS.canvas_target_height, 50):
+            pygame.draw.line(grid_surf, (0, 80, 0, 20), (0, i), (SETTINGS.canvas_actual_width, i), 1)
+        for i in range(0, SETTINGS.canvas_actual_width, 50):
+            pygame.draw.line(grid_surf, (80, 40, 0, 15), (i, 0), (i, SETTINGS.canvas_target_height), 1)
+        canvas.blit(grid_surf, (0, 0))
+
+        # Draw title with glow
+        title_glow = pygame.Surface((self.title.layout.get_width() + 40, self.title.layout.get_height() + 20), pygame.SRCALPHA)
+        for i in range(3):
+            pygame.draw.rect(title_glow, (0, 150, 0, 30 // (i + 1)), title_glow.get_rect(), border_radius=8)
+        canvas.blit(title_glow, (self.title.posx - 20, self.title.posy - 10))
         self.title.draw(canvas)
         self.back_button.draw(canvas)
+
         self.area.fill((200,200,200))
         self.area.blit(self.middle_area, (200,0))
 
@@ -561,19 +771,57 @@ class SupportSplash:
 #---------------------------------------- IN-GAME MENUS ----------------------------------------------------------------------------
 
 class GMainMenu(Menu):
-    
+
     def __init__(self):
-        Menu.__init__(self, 'LAZER TAG')
+        Menu.__init__(self, 'PAUSED')
         self.resume_button = Button((SETTINGS.canvas_actual_width/2, 200, 200, 60), "RESUME")
         self.exit_button = Button((SETTINGS.canvas_actual_width/2, 500, 200, 60), "EXIT GAME")
 
         self.background = pygame.Surface((SETTINGS.canvas_actual_width, SETTINGS.canvas_target_height)).convert_alpha()
-        self.background.fill((100,100,100,10))
-        
+        self.background.fill((5, 5, 15, 200))  # Semi-transparent dark overlay
+
+        # Team scores display
+        self.green_score_text = TEXT.Text(0, 0, "", SETTINGS.team_colors['green'], "DUGAFONT.ttf", 36)
+        self.orange_score_text = TEXT.Text(0, 0, "", SETTINGS.team_colors['orange'], "DUGAFONT.ttf", 36)
+
     def draw(self, canvas):
-        canvas.blit(self.background, (0,0))
+        canvas.blit(self.background, (0, 0))
+
+        # Draw grid overlay effect
+        grid_surf = pygame.Surface((SETTINGS.canvas_actual_width, SETTINGS.canvas_target_height), pygame.SRCALPHA)
+        for i in range(0, SETTINGS.canvas_target_height, 60):
+            pygame.draw.line(grid_surf, (0, 100, 0, 40), (0, i), (SETTINGS.canvas_actual_width, i), 1)
+        for i in range(0, SETTINGS.canvas_actual_width, 60):
+            pygame.draw.line(grid_surf, (100, 50, 0, 30), (i, 0), (i, SETTINGS.canvas_target_height), 1)
+        canvas.blit(grid_surf, (0, 0))
+
+        # Update and draw team scores
+        green_score = SETTINGS.team_kills['green']
+        orange_score = SETTINGS.team_kills['orange']
+        self.green_score_text.update_string(f"GREEN: {green_score}")
+        self.orange_score_text.update_string(f"ORANGE: {orange_score}")
+
+        # Position scores at top
+        self.green_score_text.update_pos(50, 300)
+        self.orange_score_text.update_pos(SETTINGS.canvas_actual_width - self.orange_score_text.layout.get_width() - 50, 300)
+
+        # Draw score with glow
+        for text in [self.green_score_text, self.orange_score_text]:
+            glow_surf = pygame.Surface((text.layout.get_width() + 20, text.layout.get_height() + 10), pygame.SRCALPHA)
+            color = SETTINGS.team_colors['green'] if text == self.green_score_text else SETTINGS.team_colors['orange']
+            for i in range(3):
+                pygame.draw.rect(glow_surf, (*color, 60 // (i + 1)), glow_surf.get_rect(), border_radius=5)
+            canvas.blit(glow_surf, (text.posx - 10, text.posy - 5))
+            text.draw(canvas)
+
         self.resume_button.draw(canvas)
         self.exit_button.draw(canvas)
+
+        # Draw title with glow
+        title_glow = pygame.Surface((self.title.layout.get_width() + 40, self.title.layout.get_height() + 20), pygame.SRCALPHA)
+        for i in range(3):
+            pygame.draw.rect(title_glow, (0, 200, 0, 50 // (i + 1)), title_glow.get_rect(), border_radius=8)
+        canvas.blit(title_glow, (self.title.posx - 20, self.title.posy - 10))
         self.title.draw(canvas)
 
 
@@ -581,35 +829,99 @@ class Button:
 
     def __init__(self, xywh, text):
         #ADD CLICK SOUND
-        self.surface = pygame.Surface((xywh[2], xywh[3]))
+        self.surface = pygame.Surface((xywh[2], xywh[3]), pygame.SRCALPHA)
+        self.glow_surface = pygame.Surface((xywh[2] + 20, xywh[3] + 20), pygame.SRCALPHA)
         self.rect = self.surface.get_rect()
         self.rect.center = (xywh[0], xywh[1])
+        self.glow_rect = self.glow_surface.get_rect()
+        self.glow_rect.center = (xywh[0], xywh[1])
         self.clicked = False
+        self.hover_scale = 1.0
+        self.glow_alpha = 0
+        self.pulse_timer = 0
 
         self.text = TEXT.Text(0,0, text, SETTINGS.WHITE, "DUGAFONT.ttf", 24)
         self.text.update_pos(xywh[0] - self.text.layout.get_width()/2, xywh[1] - (self.text.layout.get_height() / 2)+2)
 
-        # LASER TAG - Orange/green theme colors
-        self.filling = (40, 40, 40)  # Dark gray base
-        self.hover_color = (255, 140, 0)  # Orange when hovering
+        # LASER TAG - Enhanced colors
+        self.base_color = (30, 30, 35)
+        self.border_color = (0, 200, 0)  # Green
+        self.hover_border_color = (255, 140, 0)  # Orange
+        self.glow_color = (0, 255, 0, 80)  # Green glow
+        self.hover_glow_color = (255, 140, 0, 120)  # Orange glow
         self.sound = pygame.mixer.Sound(os.path.join('sounds', 'other', 'button.ogg'))
 
 
     def draw(self, canvas):
-        self.surface.fill(self.filling)
-        # Add orange/green border
-        pygame.draw.rect(self.surface, (0, 200, 0) if not self.rect.collidepoint(pygame.mouse.get_pos()) else (255, 140, 0),
-                        (0, 0, self.surface.get_width(), self.surface.get_height()), 3)
+        # Get scaled mouse position for accurate collision detection
+        if hasattr(SETTINGS, 'game_canvas') and hasattr(SETTINGS.game_canvas, 'get_scaled_mouse_pos'):
+            mouse_pos = SETTINGS.game_canvas.get_scaled_mouse_pos()
+        else:
+            mouse_pos = pygame.mouse.get_pos()
+        is_hovering = self.rect.collidepoint(mouse_pos)
+
+        # Update pulse animation
+        self.pulse_timer += 0.05
+        pulse = abs(pygame.math.Vector2(1, 0).rotate(self.pulse_timer * 50).x) * 0.15 + 0.85
+
+        # Smooth hover transitions
+        if is_hovering:
+            self.hover_scale = min(1.05, self.hover_scale + 0.03)
+            self.glow_alpha = min(255, self.glow_alpha + 15)
+        else:
+            self.hover_scale = max(1.0, self.hover_scale - 0.03)
+            self.glow_alpha = max(0, self.glow_alpha - 15)
+
+        # Draw glow effect when hovering
+        if self.glow_alpha > 0:
+            self.glow_surface.fill((0, 0, 0, 0))
+            glow_color = self.hover_glow_color if is_hovering else self.glow_color
+            # Multiple glow layers for better effect
+            for i in range(3):
+                alpha = int(self.glow_alpha * (1 - i * 0.3))
+                glow_rect = pygame.Rect(10 - i * 3, 10 - i * 3,
+                                       self.surface.get_width() + i * 6,
+                                       self.surface.get_height() + i * 6)
+                pygame.draw.rect(self.glow_surface, (*glow_color[:3], alpha), glow_rect, border_radius=8)
+            canvas.blit(self.glow_surface, self.glow_rect)
+
+        # Draw button with gradient
+        self.surface.fill((0, 0, 0, 0))
+
+        # Create gradient effect
+        for y in range(self.surface.get_height()):
+            gradient_factor = y / self.surface.get_height()
+            color = tuple(int(self.base_color[i] * (1 + gradient_factor * 0.3)) for i in range(3))
+            pygame.draw.line(self.surface, color, (4, y), (self.surface.get_width() - 4, y))
+
+        # Draw border with current color
+        border_color = self.hover_border_color if is_hovering else self.border_color
+        border_width = 4 if is_hovering else 3
+
+        # Animated border glow
+        if is_hovering:
+            for i in range(2):
+                alpha = int(80 * pulse * (1 - i * 0.5))
+                temp_surface = pygame.Surface((self.surface.get_width(), self.surface.get_height()), pygame.SRCALPHA)
+                pygame.draw.rect(temp_surface, (*border_color, alpha),
+                               temp_surface.get_rect(), border_width + i * 2, border_radius=6)
+                self.surface.blit(temp_surface, (0, 0))
+
+        pygame.draw.rect(self.surface, border_color,
+                        (0, 0, self.surface.get_width(), self.surface.get_height()),
+                        border_width, border_radius=6)
+
         canvas.blit(self.surface, self.rect)
         self.text.draw(canvas)
 
-        if self.rect.collidepoint(pygame.mouse.get_pos()):
-            self.filling = (60, 60, 60)  # Lighter gray on hover
-        else:
-            self.filling = (40, 40, 40)  # Dark gray normal
-
     def get_clicked(self):
-        if self.rect.collidepoint(pygame.mouse.get_pos()):
+        # Get scaled mouse position for accurate collision detection
+        if hasattr(SETTINGS, 'game_canvas') and hasattr(SETTINGS.game_canvas, 'get_scaled_mouse_pos'):
+            mouse_pos = SETTINGS.game_canvas.get_scaled_mouse_pos()
+        else:
+            mouse_pos = pygame.mouse.get_pos()
+
+        if self.rect.collidepoint(mouse_pos):
             if pygame.mouse.get_pressed()[0]:
                 self.clicked = True
             if not pygame.mouse.get_pressed()[0] and self.clicked:

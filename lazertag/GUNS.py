@@ -96,10 +96,15 @@ class Gun:
                 #Raise the gun
                 self.aim_busy = True
                 if self.current_img != self.aim[-1] and self.timer >= 0.08:
-                    x = self.aim.index(self.current_img)+1
-                    self.current_img = self.aim[x]
-                    SETTINGS.fov -= self.zoom
-                    self.timer = 0
+                    # LASER TAG FIX - Safety check before using index
+                    if self.current_img in self.aim:
+                        x = self.aim.index(self.current_img)+1
+                        self.current_img = self.aim[x]
+                        SETTINGS.fov -= self.zoom
+                        self.timer = 0
+                    else:
+                        # Reset to base aim state if current_img isn't in list
+                        self.current_img = self.aim[0]
                 elif self.current_img == self.aim[-1]:
                     self.aim_busy = False
                     self.aim_is_up = True
@@ -111,10 +116,15 @@ class Gun:
                 #Lower the gun
                 self.aim_busy = True
                 if self.current_img != self.aim[0] and self.timer >= 0.10:
-                    x = self.aim.index(self.current_img)-1
-                    self.current_img = self.aim[x]
-                    SETTINGS.fov += self.zoom
-                    self.timer = 0
+                    # LASER TAG FIX - Safety check before using index
+                    if self.current_img in self.aim:
+                        x = self.aim.index(self.current_img)-1
+                        self.current_img = self.aim[x]
+                        SETTINGS.fov += self.zoom
+                        self.timer = 0
+                    else:
+                        # Reset to base aim state if current_img isn't in list
+                        self.current_img = self.aim[0]
                 elif self.current_img == self.aim[0]:
                     self.aim_busy = False
                     self.aim_is_up = False

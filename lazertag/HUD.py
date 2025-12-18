@@ -11,9 +11,11 @@ class hud:
         self.ammo = 0
 
         self.sprite = pygame.image.load(os.path.join('graphics', 'hud.png')).convert()
-        self.sprite = pygame.transform.scale(self.sprite, (SETTINGS.canvas_actual_width, SETTINGS.window_height-SETTINGS.canvas_target_height))
+        # HUD at bottom of canvas (100 pixels tall)
+        hud_height = 100
+        self.sprite = pygame.transform.scale(self.sprite, (SETTINGS.canvas_actual_width, hud_height))
         self.rect = self.sprite.get_rect()
-        self.rect.topleft = (0, SETTINGS.canvas_target_height)
+        self.rect.topleft = (0, SETTINGS.canvas_target_height - hud_height)
 
         self.text = [TEXT.Text(int(self.rect.width/35), self.rect.y + int(self.rect.height/2.5), 'PLAYER ARMOR', SETTINGS.DARKGRAY, 'DUGAFONT.ttf', 35),
                      TEXT.Text(int(self.rect.width/3.4), self.rect.y + int(self.rect.height/2.5), 'PLAYER HEALTH', SETTINGS.DARKGRAY, 'DUGAFONT.ttf', 35),
