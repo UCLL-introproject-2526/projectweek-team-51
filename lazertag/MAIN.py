@@ -417,7 +417,7 @@ def update_game():
 
     # Display win message and return to menu
     if SETTINGS.game_won and gameLoad.timer < 4:
-        text.draw(gameCanvas.canvas)
+        text.draw(gameCanvas.window)
         gameLoad.timer += SETTINGS.dt
     elif SETTINGS.game_won and gameLoad.timer >= 4:
         # Reset everything and go back to menu
@@ -437,7 +437,7 @@ def update_game():
         if gameLoad.timer < 2:  # Show death screen for 2 seconds
             if text.string != 'RESPAWNING...':
                 text.update_string('RESPAWNING...')
-            text.draw(gameCanvas.canvas)
+            text.draw(gameCanvas.window)
             gameLoad.timer += SETTINGS.dt
         else:
             # Respawn player at their team's spawn point
@@ -471,7 +471,7 @@ def update_game():
         elif SETTINGS.current_level == len(SETTINGS.levels_list)-1 and gameLoad.timer < 4 and not SETTINGS.player_states['fade']:
             if text.string != 'YOU  WON':
                 text.update_string('YOU  WON')
-            text.draw(gameCanvas.canvas)
+            text.draw(gameCanvas.window)
             if not SETTINGS.game_won:
                 gameLoad.timer = 0
             SETTINGS.game_won = True
