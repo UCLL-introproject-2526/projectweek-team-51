@@ -219,7 +219,7 @@ class MainMenu(Menu):
 
         self.logo_surface = pygame.Surface(self.logo.get_size()).convert_alpha()
         self.logo_surface_rect = self.logo_surface.get_rect()
-        self.logo_surface_rect.center = (SETTINGS.canvas_actual_width/2, 90)
+        self.logo_surface_rect.center = (SETTINGS.canvas_actual_width/2, 180)
 
         # Load NPC sprites for animation
         try:
@@ -270,7 +270,7 @@ class MainMenu(Menu):
 
                 # Random direction outward
                 angle = random.uniform(0, 360)
-                distance = random.randint(300, 600)
+                distance = random.randint(50,150)
                 end_x = start_x + int(distance * math.cos(math.radians(angle)))
                 end_y = start_y + int(distance * math.sin(math.radians(angle)))
 
@@ -454,14 +454,17 @@ class OptionsMenu(Menu):
         
         self.strings_to_data = {
             #'graphics' : [(resolution, render), (), ()]
-            'graphics' : [(100, 10), (140, 12), (175, 14)],
+            'graphics' : [(128, 10), (160, 12), (320, 14)],
             'fov' : [50, 60, 70],
             'sensitivity' : [0.15, 0.25, 0.35], #Tjek den her
             'volume' : [0.1, 0.5, 1],
             'music volume' : [0, 0.5, 1],
             'fullscreen' : [True, False],}
 
-        self.graphics_index = self.strings_to_data['graphics'].index(settings['graphics'])
+        try:
+            self.graphics_index = self.strings_to_data['graphics'].index(settings['graphics'])
+        except ValueError:
+            self.graphics_index = 1 #Default to medium settings
         self.fov_index = self.strings_to_data['fov'].index(settings['fov'])
         self.sens_index = self.strings_to_data['sensitivity'].index(settings['sensitivity'])
         self.vol_index = self.strings_to_data['volume'].index(settings['volume'])

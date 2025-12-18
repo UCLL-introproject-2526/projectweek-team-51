@@ -204,12 +204,15 @@ class Canvas:
         import os
         os.environ['SDL_VIDEO_CENTERED'] = '1'
 
-        # Window size includes render surface (canvas + HUD)
-        render_width = self.width
-        render_height = int(self.height + (self.height * 0.15))
+        # Window size = ACTUAL canvas size (what's actually rendered)
+        # Use canvas_actual_width once it's set, otherwise use canvas_target_width
+        if SETTINGS.canvas_actual_width > 0:
+            window_width = SETTINGS.canvas_actual_width
+        else:
+            window_width = SETTINGS.canvas_target_width
+        window_height = SETTINGS.canvas_target_height
 
-        window_width = render_width
-        window_height = render_height
+        print(f"[LASER TAG] Creating window: {window_width}x{window_height}")
 
         # Create window
         self.window = pygame.display.set_mode((window_width, window_height), 0)
@@ -285,13 +288,13 @@ class Canvas:
             self.window.fill(SETTINGS.WHITE)
 
     def present(self):
-        """Display render surface directly - no scaling"""
-        # Window matches render surface size exactly
+        """Display only canvas - no HUD area"""
+        # Window shows only canvas (green border area)
         self.scale_factor = 1.0
         self.offset_x = 0
         self.offset_y = 0
 
-        self.window.blit(self.render_surface, (0, 0))
+        self.window.blit(self.canvas, (0, 0))
 
     def get_scaled_mouse_pos(self):
         """Convert window mouse position to canvas coordinates"""
@@ -386,7 +389,7 @@ def render_screen(canvas):
 
     #Draw HUD and canvas to render surface
     gameCanvas.render_surface.blit(canvas, (SETTINGS.axes))
-    gameHUD.render(gameCanvas.render_surface)
+    gameHUD.render(gameCanvas.canvas)
     # Present to display with proper scaling
     gameCanvas.present()
 
@@ -414,7 +417,7 @@ def update_game():
 
     # Display win message and return to menu
     if SETTINGS.game_won and gameLoad.timer < 4:
-        text.draw(gameCanvas.render_surface)
+        text.draw(gameCanvas.canvas)
         gameLoad.timer += SETTINGS.dt
     elif SETTINGS.game_won and gameLoad.timer >= 4:
         # Reset everything and go back to menu
@@ -434,7 +437,7 @@ def update_game():
         if gameLoad.timer < 2:  # Show death screen for 2 seconds
             if text.string != 'RESPAWNING...':
                 text.update_string('RESPAWNING...')
-            text.draw(gameCanvas.render_surface)
+            text.draw(gameCanvas.canvas)
             gameLoad.timer += SETTINGS.dt
         else:
             # Respawn player at their team's spawn point
@@ -468,7 +471,7 @@ def update_game():
         elif SETTINGS.current_level == len(SETTINGS.levels_list)-1 and gameLoad.timer < 4 and not SETTINGS.player_states['fade']:
             if text.string != 'YOU  WON':
                 text.update_string('YOU  WON')
-            text.draw(gameCanvas.render_surface)
+            text.draw(gameCanvas.canvas)
             if not SETTINGS.game_won:
                 gameLoad.timer = 0
             SETTINGS.game_won = True
@@ -548,8 +551,7 @@ def main_loop():
             if SETTINGS.menu_showing and menuController.current_type == 'main':
                 menuController.control()
                 gameCanvas.present()
-
-                #Load custom maps
+       #Load custom maps
                 if SETTINGS.playing_customs:
                     SETTINGS.levels_list = SETTINGS.clevels_list
                     gameLoad.get_canvas_size()
@@ -596,8 +598,8 @@ def main_loop():
                   #  beta.draw(gameCanvas.window)
                 
                 elif SETTINGS.mode == 0:
-                    gameMap.draw(gameCanvas.render_surface)
-                    gamePlayer.draw(gameCanvas.render_surface)
+                    gameMap.draw(gameCanvas.canvas)
+                    gamePlayer.draw(gameCanvas.canvas)
 
                     for x in SETTINGS.raylines:
                         pygame.draw.line(gameCanvas.render_surface, SETTINGS.RED, (x[0][0]/4, x[0][1]/4), (x[1][0]/4, x[1][1]/4))
@@ -676,7 +678,7 @@ if __name__ == '__main__':
     gameLoad.load_new_level()
 
     #Controller classes
-    menuController = MENU.Controller(gameCanvas.render_surface)
+    menuController = MENU.Controller(gameCanvas.canvas)
     musicController = MUSIC.Music()
 
     #Run at last
