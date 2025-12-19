@@ -1,4 +1,4 @@
- #This is the player script. This is where the movement and collision detection of the player is.
+#This is the player script. This is where the movement and collision detection of the player is.
 
 import SETTINGS
 import EFFECTS
@@ -7,6 +7,7 @@ import SOUND
 import pygame
 import math
 import os
+import SPRITES
 
 class Player:
 
@@ -301,11 +302,159 @@ class Player:
         canvas.blit(self.sprite, (self.rect.x/4, self.rect.y/4))
         pygame.draw.line(canvas, self.color, (self.rect.center[0]/4, self.rect.center[1]/4), (p1/4, p2/4))
 
+
+# ... (Keep existing Player class) ...
+
+class RemotePlayer:
+    def __init__(self, id, team):
+        self.id = id
+        self.team = team
+        self.type = 'remote'
+        self.solid = False # Players shouldn't block each other's movement
+        self.dead = False
+        self.state = "idle" # Attribute required by GUNS.py damage logic
+
+        # Position variables
+        self.real_x = 0
+        self.real_y = 0
+        self.angle = 0
+        self.rect = pygame.Rect(0, 0, SETTINGS.tile_size/3, SETTINGS.tile_size/3)
         
+        # --- ATTRIBUTES REQUIRED BY ENGINE ---
+        self.hit_rect = self.rect    # Required by GUNS.py
+        self.player_in_view = False  # Required by rendering/NPC logic
+        self.map_pos = [0, 0]        # Required for grid-based calculations
+        self.dist = 0                # Required for Raycasting depth
+        # -------------------------------------
+
+        # Visuals - Team specific spritesheet loading
+        if self.team == 'green':
+            tex_path = os.path.join('graphics', 'npc', 'green_team_player.png')
+        else:
+            tex_path = os.path.join('graphics', 'npc', 'orange_team_player.png')
+            
+        self.texture = pygame.image.load(tex_path).convert_alpha()
         
-
-
-
-
-
+        # Slicing spritesheet into animation sets
+        self.stand_texture = [self.texture.subsurface(x*64, 0, 64, 128).convert_alpha() for x in range(8)]
+        self.front_texture = [self.texture.subsurface(x*64, 128, 64, 128).convert_alpha() for x in range(10)]
+        self.frontright_texture = [self.texture.subsurface(x*64, 256, 64, 128).convert_alpha() for x in range(10)]
+        self.right_texture = [self.texture.subsurface(x*64, 384, 64, 128).convert_alpha() for x in range(10)]
+        self.backright_texture = [self.texture.subsurface(x*64, 512, 64, 128).convert_alpha() for x in range(10)]
+        self.back_texture = [self.texture.subsurface(x*64, 640, 64, 128).convert_alpha() for x in range(10)]
         
+        self.backleft_texture = [pygame.transform.flip(img, True, False) for img in self.backright_texture]
+        self.left_texture = [pygame.transform.flip(img, True, False) for img in self.right_texture]
+        self.frontleft_texture = [pygame.transform.flip(img, True, False) for img in self.frontright_texture]
+        
+        self.die_texture = [self.texture.subsurface(x*64, 768, 64, 128).convert_alpha() for x in range(11)]
+        self.hit_texture = [self.texture.subsurface(x*64, 896, 64, 128).convert_alpha() for x in range(6)]
+
+        self.health = 100
+        self.current_frame = 0
+        self.timer = 0
+        self.frame_interval = 0.1
+        self.moving = False
+        self.shooting = False
+        
+        # Initialize rendering sprite for the 2.5D engine
+        self.sprite = SPRITES.Sprite(self.stand_texture[0], self.id, [0,0], 'npc', self)
+        SETTINGS.all_sprites.append(self.sprite)
+
+    def update(self, data):
+        """Updates internal state with data received from the server."""
+        # CHANGE: Interpret received x/y as Center coordinates
+        center_x = data.get('x', self.real_x + (self.rect.width / 2))
+        center_y = data.get('y', self.real_y + (self.rect.height / 2))
+
+        # Convert Center back to Top-Left for local rendering/logic
+        self.real_x = center_x - (self.rect.width / 2)
+        self.real_y = center_y - (self.rect.height / 2)
+        
+        # Sync physical and collision rects
+        self.rect.x = self.real_x
+        self.rect.y = self.real_y
+        self.rect.center = (center_x, center_y)
+        self.hit_rect = self.rect
+        
+        # Calculate grid position for engine logic
+        self.map_pos = [int(self.rect.centerx / SETTINGS.tile_size), int(self.rect.centery / SETTINGS.tile_size)]
+        
+        self.angle = data.get('angle', self.angle)
+        self.health = data.get('health', self.health)
+        
+        # Determine animation states based on server inputs
+        keys = data.get('keys', {})
+        self.moving = any(keys.values())
+        self.shooting = data.get('is_shooting', False)
+        
+        # Handle Death AND Respawn (Fix for invisible players)
+        if self.health <= 0:
+            self.dead = True
+            self.solid = False
+        elif self.health > 0 and self.dead:
+            self.dead = False
+            self.solid = False
+            self.current_frame = 0
+            self.timer = 0
+
+    def think(self):
+        """Calculates distance and relative angle for 3D rendering."""
+        if self.dead and self.current_frame >= len(self.die_texture)-1:
+            return
+
+        # Calculate distance to local player for rendering depth
+        xpos = SETTINGS.player_rect.centerx - self.rect.centerx
+        ypos = SETTINGS.player_rect.centery - self.rect.centery
+        self.dist = math.sqrt(xpos*xpos + ypos*ypos)
+        
+        self.timer += SETTINGS.dt
+
+        # Only process visual rotation if player is within render distance
+        if self.dist <= SETTINGS.render * SETTINGS.tile_size:
+            theta = math.atan2(-ypos, xpos) % (2*math.pi)
+            theta = math.degrees(theta)
+            
+            # Offset rotation by the player's current facing angle
+            theta -= self.angle
+            if theta < 0: theta += 360
+            elif theta > 360: theta -= 360
+            
+            self.sprite.update_pos([self.rect.x, self.rect.y])
+            
+            # Select appropriate animation set
+            if self.dead:
+                anim_set = self.die_texture
+                loop = False
+            elif self.shooting:
+                anim_set = self.hit_texture
+                loop = True
+            elif self.moving:
+                # 8-Way directional sprite selection logic
+                if theta <= 22.5 or theta >= 337.5:     anim_set = self.front_texture
+                elif theta <= 67.5:                     anim_set = self.frontleft_texture
+                elif theta <= 112.5:                    anim_set = self.left_texture
+                elif theta <= 157.5:                    anim_set = self.backleft_texture
+                elif theta <= 202.5:                    anim_set = self.back_texture
+                elif theta <= 247.5:                    anim_set = self.backright_texture
+                elif theta <= 292.5:                    anim_set = self.right_texture
+                else:                                   anim_set = self.frontright_texture
+                loop = True
+            else:
+                anim_set = [self.stand_texture[0]]
+                loop = True
+
+            # Safety reset if animation set length changed
+            if self.current_frame >= len(anim_set):
+                self.current_frame = 0
+
+            # Advance animation frame based on time
+            if self.timer >= self.frame_interval:
+                self.current_frame += 1
+                self.timer = 0
+                if self.current_frame >= len(anim_set):
+                    if loop: self.current_frame = 0
+                    else: self.current_frame = len(anim_set) - 1
+            
+            self.sprite.texture = anim_set[self.current_frame]
+            self.hit_rect = self.rect

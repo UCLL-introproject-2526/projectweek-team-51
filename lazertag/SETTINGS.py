@@ -1,5 +1,5 @@
 #Settings for DUGA
-
+import random
 '''Game settings'''
 current_level = 0
 fps = 31
@@ -141,7 +141,7 @@ team_colors = {
     'green': (0, 255, 0),      # Bright green
     'orange': (255, 165, 0)    # Bright orange
 }
-win_score = 20  # First team to reach this score wins
+win_score = 10  # First team to reach this score wins
 game_winner = None  # Stores which team won
 
 
@@ -290,3 +290,9 @@ YELLOW = (255, 255, 0)
 #Overvej at lave justerbare controls
 
 temp = []
+# ... (Keep all existing code) ...
+
+'''Multiplayer Settings'''
+my_id = 0  # Generate a temporary unique ID
+remote_players = {}                # Stores RemotePlayer objects: {id: object}
+hit_events = []                    # Queue for hit events (implemented in next steps)
