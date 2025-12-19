@@ -40,21 +40,50 @@ class Load:
         ID = 0
         current_texture = 0
         self.timer = 0
+        
+        # 1. Load or Generate Wall and Sprite Textures
         for texture in TEXTURES.all_textures:
             if SETTINGS.texture_type[ID] == 'sprite':
+                # Sprites always load from file paths
                 SETTINGS.texture_list.append(pygame.image.load(texture))
             else:
-                SETTINGS.texture_list.append(Texture(texture, ID))
+                # Handle Procedural vs File-based Wall Textures
+                if isinstance(texture, str) and texture.startswith('PROCEDURAL:'):
+                    pattern_type = texture.split(':')[1]
+                    
+                    # Map keywords to TEXTURES.py generator functions
+                    if pattern_type == 'smooth_metal':
+                        procedural_surface = TEXTURES.create_smooth_metal(SETTINGS.tile_size, SETTINGS.tile_size)
+                    elif pattern_type == 'tech_wall':
+                        procedural_surface = TEXTURES.create_tech_wall(SETTINGS.tile_size, SETTINGS.tile_size)
+                    elif pattern_type == 'neon_panel':
+                        procedural_surface = TEXTURES.create_neon_panel(SETTINGS.tile_size, SETTINGS.tile_size)
+                    elif pattern_type == 'obstacle_wall':
+                        procedural_surface = TEXTURES.create_obstacle_wall(SETTINGS.tile_size, SETTINGS.tile_size)
+                    else:
+                        procedural_surface = TEXTURES.create_smooth_metal(SETTINGS.tile_size, SETTINGS.tile_size)
+                    
+                    # Wrap the generated surface in a Texture object
+                    SETTINGS.texture_list.append(Texture(None, ID, procedural_surface=procedural_surface))
+                else:
+                    # Standard file loading
+                    SETTINGS.texture_list.append(Texture(texture, ID))
             ID += 1
-        #Update the dictionary in SETTINGS
+
+        # 2. Map loaded textures to the global settings dictionary
         for texture in SETTINGS.texture_list:
             SETTINGS.tile_texture.update({current_texture : texture})
             current_texture += 1
 
-        #Mixer goes under here as well
+        # 3. Generate Global Floor and Ceiling Textures for the 2.5D view
+        # These are used in Canvas.draw() to create the arena atmosphere
+        SETTINGS.floor_texture = TEXTURES.create_tech_floor(SETTINGS.tile_size, SETTINGS.tile_size)
+        SETTINGS.ceiling_texture = TEXTURES.create_tech_ceiling(SETTINGS.tile_size, SETTINGS.tile_size)
+
+        # 4. Initialize Audio and Load Configuration Files
         pygame.mixer.init()
 
-        #Load custom settings
+        # Load saved user preferences
         with open(os.path.join('data', 'settings.dat'), 'rb') as settings_file:
             settings = pickle.load(settings_file)
             
@@ -66,7 +95,7 @@ class Load:
         SETTINGS.render = settings['graphics'][1]
         SETTINGS.fullscreen = settings['fullscreen']
 
-        #Load statistics
+        # Load persistent game statistics
         with open(os.path.join('data', 'statistics.dat'), 'rb') as stats_file:
             stats = pickle.load(stats_file)
 
@@ -140,11 +169,17 @@ class Load:
         ENTITIES.spawn_items()
 
 #Texturing
+#Texturing
 class Texture:
-    
-    def __init__(self, file_path, ID):
+    def __init__(self, file_path, ID, procedural_surface=None):
         self.slices = []
-        self.texture = pygame.image.load(file_path).convert()
+        if procedural_surface:
+            # Use the procedurally generated surface directly
+            self.texture = procedural_surface
+        else:
+            # Load from file (classic method)
+            self.texture = pygame.image.load(file_path).convert()
+            
         self.rect = self.texture.get_rect()
         self.ID = ID
 
@@ -155,7 +190,6 @@ class Texture:
         for row in range(self.rect.width):
             self.slices.append(row)
             row += 1
-
 
 #Canvas
 class Canvas:
@@ -200,21 +234,35 @@ class Canvas:
         SETTINGS.switch_mode = False
 
     def draw(self):
-        if SETTINGS.mode == 1:
-            self.canvas.fill(SETTINGS.levels_list[SETTINGS.current_level].sky_color)
-            self.window.fill(SETTINGS.BLACK)
-            pygame.draw.rect(self.canvas, SETTINGS.levels_list[SETTINGS.current_level].ground_color, (0, self.height/2, self.width, self.height/2))
+            if SETTINGS.mode == 1:
+                # Draw textured ceiling and floor
+                if SETTINGS.ceiling_texture and SETTINGS.floor_texture:
+                    # Tile the ceiling texture across the top half
+                    tile_width = SETTINGS.ceiling_texture.get_width()
+                    tile_height = SETTINGS.ceiling_texture.get_height()
 
-            if SETTINGS.shade:
-                for i in range(len(self.shade)):
-                    if i != 5:
-                        self.shade[i].fill((self.rgba[0], self.rgba[1], self.rgba[2], self.rgba[3]))
-                    else:
-                        self.shade[i].fill((self.rgba[0], self.rgba[1], self.rgba[2], SETTINGS.shade_rgba[3]))
-                    self.canvas.blit(self.shade[i], (0, self.height/2 - self.shade[i].get_height()/2))
+                    for x in range(0, self.width, tile_width):
+                        for y in range(0, int(self.height/2), tile_height):
+                            self.canvas.blit(SETTINGS.ceiling_texture, (x, y))
 
-        else:
-            self.window.fill(SETTINGS.WHITE)
+                    # Tile the floor texture across the bottom half
+                    for x in range(0, self.width, tile_width):
+                        for y in range(int(self.height/2), self.height, tile_height):
+                            self.canvas.blit(SETTINGS.floor_texture, (x, y))
+                else:
+                    # Fallback to solid colors if textures are missing
+                    self.canvas.fill(SETTINGS.levels_list[SETTINGS.current_level].sky_color)
+                    pygame.draw.rect(self.canvas, SETTINGS.levels_list[SETTINGS.current_level].ground_color, (0, self.height/2, self.width, self.height/2))
+
+                self.window.fill(SETTINGS.BLACK)
+
+                if SETTINGS.shade:
+                    for i in range(len(self.shade)):
+                        if i != 5:
+                            self.shade[i].fill((self.rgba[0], self.rgba[1], self.rgba[2], self.rgba[3]))
+                        else:
+                            self.shade[i].fill((self.rgba[0], self.rgba[1], self.rgba[2], SETTINGS.shade_rgba[3]))
+                        self.canvas.blit(self.shade[i], (0, self.height/2 - self.shade[i].get_height()/2))
 
 def sort_distance(x):
     if x == None:

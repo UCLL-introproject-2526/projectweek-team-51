@@ -8,33 +8,33 @@ import math
 pygame.init()
 
 class Slice:
-
     def __init__(self, location, surface, width, vh):
-        # LASER TAG FIX - Clamp offset and height to texture bounds to prevent crash
+        # 1. Define and clamp offsets (Fixes "x_offset not defined" crash)
         x_offset = location[0]
         y_offset = location[1]
         surface_width = surface.get_width()
         surface_height = surface.get_height()
 
-        # Clamp x offset
+        # Clamp x_offset
         if x_offset >= surface_width:
             x_offset = surface_width - 1
-        if x_offset < 0:
+        elif x_offset < 0:
             x_offset = 0
 
-        # Clamp y offset and height
+        # Clamp y_offset
         if y_offset < 0:
             y_offset = 0
-        if y_offset >= surface_height:
+        elif y_offset >= surface_height:
             y_offset = surface_height - 1
 
-        # Ensure slice height doesn't exceed texture bounds and is at least 1
+        # 2. Ensure slice height is valid
         slice_height = width
         if y_offset + slice_height > surface_height:
             slice_height = surface_height - y_offset
         if slice_height < 1:
             slice_height = 1
 
+        # 3. Create the subsurface
         self.slice = surface.subsurface(pygame.Rect((x_offset, y_offset), (1, slice_height))).convert()
         self.rect = self.slice.get_rect(center = (0, SETTINGS.canvas_target_height/2))
         self.distance = None
@@ -42,50 +42,40 @@ class Slice:
         self.vh = vh
         self.xpos = 0
 
+        # 4. Initialize shading vars
         if SETTINGS.shade:
             self.shade_slice = pygame.Surface(self.slice.get_size()).convert_alpha()
             sv = SETTINGS.shade_visibility / 10
-            self.shade_intensity = [sv*1, sv*2, sv*3, sv*4, sv*5, sv*6, sv*7, sv*8, sv*9, sv*10]
-        
+            self.shade_intensity = [sv*i for i in range(1, 11)]
+
     def update_rect(self, new_slice):            
         self.tempslice = new_slice
         self.rect = new_slice.get_rect(center = (self.xpos, int(SETTINGS.canvas_target_height/2)))
 
+        # Visual Fix: Darken vertical wall slices to create 3D depth/corners
         if self.vh == 'v':
             self.darkslice = pygame.Surface(self.tempslice.get_size()).convert_alpha()
-            self.darkslice.fill((0,0,0,SETTINGS.texture_darken))
+            self.darkslice.fill((0, 0, 0, SETTINGS.texture_darken))
 
+        # Atmospheric Fix: Apply distance-based shading
         if SETTINGS.shade:
-            #Shade intensity table
             intensity = 0
-            if self.distance < self.shade_intensity[0]:
-                intensity = 0
-            elif self.distance < self.shade_intensity[1]:
-                intensity = 0.1
-            elif self.distance < self.shade_intensity[2]:
-                intensity = 0.2
-            elif self.distance < self.shade_intensity[3]:
-                intensity = 0.3
-            elif self.distance < self.shade_intensity[4]:
-                intensity = 0.4
-            elif self.distance < self.shade_intensity[5]:
-                intensity = 0.5
-            elif self.distance < self.shade_intensity[6]:
-                intensity = 0.6
-            elif self.distance < self.shade_intensity[7]:
-                intensity = 0.7
-            elif self.distance < self.shade_intensity[8]:
-                intensity = 0.8
-            elif self.distance < self.shade_intensity[9]:
-                intensity = 0.9
-            else:
-                intensity = 1
+            # Find the correct darkness level based on distance
+            if self.distance is not None:
+                for i, threshold in enumerate(self.shade_intensity):
+                    if self.distance < threshold:
+                        intensity = i * 0.1
+                        break
+                else:
+                    intensity = 1.0
             
             self.shade_slice = pygame.Surface(self.tempslice.get_size()).convert_alpha()
-            self.shade_slice.fill((SETTINGS.shade_rgba[0]*intensity, SETTINGS.shade_rgba[1]*intensity,
-                                   SETTINGS.shade_rgba[2]*intensity, SETTINGS.shade_rgba[3]*intensity))
-        
-
+            self.shade_slice.fill((
+                SETTINGS.shade_rgba[0] * intensity, 
+                SETTINGS.shade_rgba[1] * intensity,
+                SETTINGS.shade_rgba[2] * intensity, 
+                SETTINGS.shade_rgba[3] * intensity
+            ))
 class Raycast:
     '''== Raycasting class ==\ncanvas -> Game canvas'''
     def __init__(self, canvas, canvas2):
@@ -350,22 +340,22 @@ class Raycast:
 
     def render_screen(self, ray_number, wall_dist, texture, offset, current_tile, vh, end_pos):
         if wall_dist:
+            # Calculate wall height based on perspective
             wall_height = int((self.tile_size / wall_dist) * (360 / math.tan(math.radians(SETTINGS.fov * 0.8))))
-            SETTINGS.zbuffer.append(Slice((texture.slices[offset], 0), texture.texture, texture.rect.width, vh))
-            SETTINGS.zbuffer[ray_number].distance = wall_dist
-            rendered_slice = pygame.transform.scale(SETTINGS.zbuffer[ray_number].slice, (self.wall_width, wall_height))
-            SETTINGS.zbuffer[ray_number].update_rect(rendered_slice)
-            SETTINGS.zbuffer[ray_number].xpos = ((ray_number) * self.wall_width)
-
+            
+            # Create the slice with vh (vertical/horizontal) data
+            new_slice = Slice((texture.slices[offset], 0), texture.texture, texture.rect.width, vh)
+            new_slice.distance = wall_dist
+            new_slice.xpos = (ray_number * self.wall_width)
+            
+            # Scale the slice to the calculated wall height
+            rendered_slice = pygame.transform.scale(new_slice.slice, (self.wall_width, wall_height))
+            new_slice.update_rect(rendered_slice)
+            
+            SETTINGS.zbuffer.append(new_slice)
         else:
             SETTINGS.zbuffer.append(None)
-            
-        #Middle ray info
-        if ray_number == int(self.res/2):
-            SETTINGS.middle_slice_len = wall_dist
-            SETTINGS.middle_slice = current_tile
-            SETTINGS.middle_ray_pos = end_pos
-            
+                
 
     def draw_line(self, player_rect, end_pos):
         SETTINGS.raylines.append((player_rect.center, end_pos))
