@@ -680,11 +680,14 @@ def main_loop():
                     if hasattr(SETTINGS, 'my_id'):
                         delattr(SETTINGS, 'my_id')
                     
+                    # CRITICAL FIX: Clear remote_players dictionary to prevent clones
+                    remote_players.clear()
+                    print("[LASER TAG] Cleared remote_players - no more clones!")
+                    
                     # Close any existing network connection
                     if gameNetwork and gameNetwork.connected:
                         gameNetwork.client.close()
                     gameNetwork = None
-                    remote_players.clear()
                     print("[LASER TAG] Returned to menu - scores reset to 0-0")
                 
                 if menuController:
@@ -711,7 +714,7 @@ def main_loop():
                     remote_server_data = gameNetwork.send(player_data_to_send)
                     
                     # Make sure we have our ID before processing players
-                    if not hasattr(SETTINGS, 'my_id'):
+                    if not hasattr(SETTINGS, 'my_id') or SETTINGS.my_id is None:
                         # Wait for server to assign ID
                         remote_server_data = []
                     
@@ -724,15 +727,19 @@ def main_loop():
                                 if p_id is None:
                                     continue
                                 
-                                # Skip ourselves - we control our player locally
-                                if hasattr(SETTINGS, 'my_id') and p_id == SETTINGS.my_id:
+                                # CRITICAL FIX #1: Skip ourselves - we control our player locally
+                                # This prevents rendering your own player as an NPC (the "clones" bug)
+                                if p_id == SETTINGS.my_id:
                                     continue
 
                                 current_remote_ids.add(p_id)
+                                
+                                # Check if player is alive from server data
+                                is_alive_on_server = p_data.get('alive', True)
 
                                 if p_id not in remote_players:
                                     # Player is not in our list, check if they are alive before adding
-                                    if not p_data.get('alive', True):
+                                    if not is_alive_on_server:
                                         continue # Don't add dead players
 
                                     # Convert team number (0/1) to team name (green/orange)
@@ -750,70 +757,99 @@ def main_loop():
                                 
                                 player_npc = remote_players.get(p_id)
                                 if player_npc:
-                                    # Always update health from server
-                                    player_npc.health = p_data.get('health', 100)
-
-                                    # If the NPC is in the dying animation, don't update its position/state
-                                    if player_npc.state == 'dying' or player_npc.dead:
-                                        continue
-
-                                    # Update position
+                                    # Get new position from server
                                     new_x = p_data.get('x', 0)
                                     new_y = p_data.get('y', 0)
+                                    new_health = p_data.get('health', 100)
                                     
-                                    # Detect respawn (teleportation)
-                                    dx = abs(new_x - player_npc.rect.centerx)
-                                    dy = abs(new_y - player_npc.rect.centery)
-                                    if dx > 500 or dy > 500:
-                                        #This is a respawn, so reset state
-                                        player_npc.state = 'idle'
+                                    # CRITICAL FIX #2: Handle death-to-alive transition (respawn)
+                                    if player_npc.dead and is_alive_on_server:
+                                        # Player respawned! Reset everything
+                                        print(f"[NETWORK] Player {p_id} respawned at ({new_x}, {new_y})")
                                         player_npc.dead = False
+                                        player_npc.solid = True
+                                        player_npc.health = new_health
+                                        player_npc.state = 'idle'
                                         player_npc.hurting = False
-                                        print(f"[NETWORK] Player {p_id} respawned")
+                                        player_npc.attacking = False
+                                        player_npc.current_frame = 1
+                                        player_npc.mein_leben = False
+                                        # Teleport to new position
+                                        player_npc.rect.centerx = new_x
+                                        player_npc.rect.centery = new_y
+                                        player_npc.real_x = player_npc.rect.x
+                                        player_npc.real_y = player_npc.rect.y
+                                        continue
                                     
-                                    player_npc.rect.centerx = new_x
-                                    player_npc.rect.centery = new_y
-                                    player_npc.angle = p_data.get('angle', 0)
+                                    # CRITICAL FIX #2: Handle alive-to-dead transition
+                                    if not player_npc.dead and not is_alive_on_server:
+                                        # Player just died! Start death animation
+                                        print(f"[NETWORK] Player {p_id} died - starting death animation")
+                                        player_npc.health = 0
+                                        player_npc.state = 'dying'
+                                        # DON'T continue here - let it fall through to update position ONE LAST TIME
                                     
-                                    # Set state based on shooting
-                                    is_shooting = p_data.get('is_shooting', False)
-                                    if is_shooting:
-                                        # Use 'attacking' state to trigger animation via think()
-                                        player_npc.state = 'attacking'
-                                    else:
-                                        # Only reset to idle if the current state was attacking
-                                        if player_npc.state == 'attacking':
-                                            player_npc.state = 'idle'
+                                    # CRITICAL FIX #2: If already dead, skip ALL updates (death animation plays in think())
+                                    if player_npc.dead:
+                                        continue
+                                    
+                                    # Normal update for alive OR dying players (dying needs position for animation)
+                                    player_npc.health = new_health
+                                    
+                                    # Only update position if NOT in dying state
+                                    # (dying state plays animation in place)
+                                    if player_npc.state != 'dying':
+                                        player_npc.rect.centerx = new_x
+                                        player_npc.rect.centery = new_y
+                                        player_npc.real_x = player_npc.rect.x
+                                        player_npc.real_y = player_npc.rect.y
+                                        player_npc.angle = p_data.get('angle', 0)
+                                        
+                                        # Set state based on shooting
+                                        is_shooting = p_data.get('is_shooting', False)
+                                        if is_shooting:
+                                            player_npc.state = 'attacking'
+                                        else:
+                                            if player_npc.state == 'attacking':
+                                                player_npc.state = 'idle'
                                     
                                     # Check if this player hit me
                                     hits = p_data.get('hits', [])
-                                    if hasattr(SETTINGS, 'my_id') and SETTINGS.my_id in hits:
+                                    if SETTINGS.my_id in hits:
                                         print(f"[COMBAT] ⚡ Player {p_id} HIT ME! ⚡")
                             except Exception as e:
                                 print(f"[NETWORK] Error processing player {p_data.get('id', '?')}: {e}")
+                                import traceback
+                                traceback.print_exc()
 
-                        # After processing, remove NPCs whose death animation has finished
-                        dead_npc_ids = [p_id for p_id, npc in remote_players.items() if npc.dead]
-                        for p_id in dead_npc_ids:
-                            # Make sure they haven't already respawned in the same frame
-                            is_still_dead = True
-                            if remote_server_data:
+                        # CRITICAL FIX #2: Clean up - Remove players whose death animation has finished
+                        # and who are still dead on the server
+                        to_remove = []
+                        for p_id, npc in remote_players.items():
+                            if npc.dead:
+                                # Check if they're still dead on server
+                                still_dead = True
                                 for p_data in remote_server_data:
-                                    if p_data.get('id') == p_id and p_data.get('alive', True):
-                                        is_still_dead = False
+                                    if p_data.get('id') == p_id:
+                                        if p_data.get('alive', False):
+                                            still_dead = False
                                         break
-                            if is_still_dead:
-                                print(f"[NETWORK] Player {p_id} death animation finished - removing from render")
-                                del remote_players[p_id]
+                                
+                                if still_dead:
+                                    to_remove.append(p_id)
+                        
+                        for p_id in to_remove:
+                            print(f"[NETWORK] Removing dead player {p_id} - death animation finished")
+                            del remote_players[p_id]
 
+                        # Handle disconnected players
                         disconnected_ids = set(remote_players.keys()) - current_remote_ids
                         for p_id in disconnected_ids:
-                            # Don't re-print if we just removed them for being dead
-                            if p_id not in dead_npc_ids:
-                                print(f"[NETWORK] Player {p_id} left.")
-                                if p_id in remote_players:
-                                    del remote_players[p_id]
+                            print(f"[NETWORK] Player {p_id} disconnected")
+                            if p_id in remote_players:
+                                del remote_players[p_id]
 
+                        # Update NPC list for rendering
                         SETTINGS.npc_list = list(remote_players.values())
                 
                 # Check if we got disconnected
