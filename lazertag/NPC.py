@@ -795,24 +795,25 @@ class Npc:
                     self.sprite.texture = self.stand_texture[0]
                     self.current_frame = 0
                     self.attacking = False
-                    if random.randint(0,8) != 8: #A chance to miss
-                        # LASER TAG - Track which NPC team last damaged the player
-                        SETTINGS.last_damager_team = self.team
+                    if not hasattr(self, 'is_remote_player'):
+                        if random.randint(0,8) != 8: #A chance to miss
+                            # LASER TAG - Track which NPC team last damaged the player
+                            SETTINGS.last_damager_team = self.team
 
-                        if SETTINGS.player_armor > 0:
-                            SETTINGS.player_health -= int(self.dmg * 0.65)
-                            if SETTINGS.player_armor >= self.dmg * 2:
-                                SETTINGS.player_armor -= self.dmg * 2
+                            if SETTINGS.player_armor > 0:
+                                SETTINGS.player_health -= int(self.dmg * 0.65)
+                                if SETTINGS.player_armor >= self.dmg * 2:
+                                    SETTINGS.player_armor -= self.dmg * 2
+                                else:
+                                    SETTINGS.player_armor = 0
                             else:
-                                SETTINGS.player_armor = 0
-                        else:
-                            SETTINGS.player_health -= self.dmg
+                                SETTINGS.player_health -= self.dmg
 
-                        # LASER TAG - If player died from this damage, award kill to NPC's team
-                        if SETTINGS.player_health <= 0 and not SETTINGS.player_states['dead']:
-                            if self.team != SETTINGS.player_team:
-                                SETTINGS.team_kills[self.team] += 1
-                                print(f"[LASER TAG] {self.team.upper()} team scored! Score: GREEN {SETTINGS.team_kills['green']} - ORANGE {SETTINGS.team_kills['orange']}")
+                            # LASER TAG - If player died from this damage, award kill to NPC's team
+                            if SETTINGS.player_health <= 0 and not SETTINGS.player_states['dead']:
+                                if self.team != SETTINGS.player_team:
+                                    SETTINGS.team_kills[self.team] += 1
+                                    print(f"[LASER TAG] {self.team.upper()} team scored! Score: GREEN {SETTINGS.team_kills['green']} - ORANGE {SETTINGS.team_kills['orange']}")
 
     def drop_item(self):
         # LASER TAG - Don't drop items in laser tag mode (unlimited ammo)

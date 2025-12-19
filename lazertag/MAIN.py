@@ -584,49 +584,27 @@ def main_loop():
                 
                 else:
                     print("[LASER TAG] Successfully connected to multiplayer server!")
+                    print("[LASER TAG] Waiting for game state from server...")
                     
-                    # Give reader thread time to start
-                    import time
-                    time.sleep(0.05)
-                    
-                    # Send initial input to establish connection with server
-                    initial_input = {
-                        "type": "input",
-                        "up": False,
-                        "down": False,
-                        "left": False,
-                        "right": False,
-                        "shoot": False,
-                        "aim_x": 0.0,
-                        "x": 0.0,
-                        "y": 0.0,
-                        "weapon": "None"
-                    }
-                    if gameNetwork._send_json(initial_input):
-                        print("[LASER TAG] Initial message sent to server")
-                    else:
-                        print("[LASER TAG] Failed to send initial message")
-                    
-                    # Always start with fresh scores when connecting
-                    # The server will update them if there's an ongoing game
-                    SETTINGS.team_kills['green'] = 0
-                    SETTINGS.team_kills['orange'] = 0
+                    # DON'T reset scores - server will send current scores
+                    # This allows joining games in progress
                     SETTINGS.game_won = False
                     SETTINGS.game_winner = None
                     gameLoad.timer = 0
-                    print("[LASER TAG] Waiting for game state from server...")
             
             else:
                 # SOLO PATH: Not multiplayer, ensure no connection
                 print("[LASER TAG] Starting solo laser tag...")
                 gameNetwork = None
                 
-                # FORCE reset scores for solo play (override any multiplayer state)
-                SETTINGS.team_kills = {'green': 0, 'orange': 0}  # Recreate dict
+                # FORCE reset scores - delete and recreate dictionary
+                if hasattr(SETTINGS, 'team_kills'):
+                    delattr(SETTINGS, 'team_kills')
+                SETTINGS.team_kills = {'green': 0, 'orange': 0}
                 SETTINGS.game_won = False
                 SETTINGS.game_winner = None
                 gameLoad.timer = 0
-                print("[LASER TAG] Scores reset for solo mode: GREEN 0 - ORANGE 0")
+                print(f"[LASER TAG] Solo mode scores: GREEN {SETTINGS.team_kills['green']} - ORANGE {SETTINGS.team_kills['orange']}")
             
             # Initialize game (both multiplayer and solo)
             print("DEBUG: Game starting...")
@@ -689,17 +667,25 @@ def main_loop():
                 # If we're back in the menu and game was started, reset it
                 if game_started and menuController.current_type == 'main':
                     game_started = False
-                    # Reset scores when returning to menu
-                    SETTINGS.team_kills['green'] = 0
-                    SETTINGS.team_kills['orange'] = 0
+                    
+                    # ALWAYS reset scores - delete and recreate dictionary
+                    if hasattr(SETTINGS, 'team_kills'):
+                        delattr(SETTINGS, 'team_kills')
+                    SETTINGS.team_kills = {'green': 0, 'orange': 0}
                     SETTINGS.game_won = False
                     SETTINGS.game_winner = None
+                    print(f"[DEBUG] Menu scores: GREEN {SETTINGS.team_kills['green']} - ORANGE {SETTINGS.team_kills['orange']}")
+                    
+                    # Clear my_id so it gets reassigned on reconnect
+                    if hasattr(SETTINGS, 'my_id'):
+                        delattr(SETTINGS, 'my_id')
+                    
                     # Close any existing network connection
                     if gameNetwork and gameNetwork.connected:
                         gameNetwork.client.close()
                     gameNetwork = None
                     remote_players.clear()
-                    print("[LASER TAG] Game session ended, ready for new game")
+                    print("[LASER TAG] Returned to menu - scores reset to 0-0")
                 
                 if menuController:
                     menuController.control()
@@ -717,51 +703,129 @@ def main_loop():
                     player_data_to_send = {
                         "keys": { "w": keys[pygame.K_w], "s": keys[pygame.K_s], "a": keys[pygame.K_a], "d": keys[pygame.K_d] },
                         "angle": SETTINGS.player_angle,
-                        "x": SETTINGS.player_pos[0],
-                        "y": SETTINGS.player_pos[1],
+                        "x": gamePlayer.real_x,
+                        "y": gamePlayer.real_y,
                         "is_shooting": SETTINGS.mouse_btn_active,
                         "weapon": SETTINGS.current_gun.name if SETTINGS.current_gun else "None"
                     }
                     remote_server_data = gameNetwork.send(player_data_to_send)
                     
+                    # Make sure we have our ID before processing players
+                    if not hasattr(SETTINGS, 'my_id'):
+                        # Wait for server to assign ID
+                        remote_server_data = []
+                    
                     # Process remote players
                     current_remote_ids = set()
                     if remote_server_data:
                         for p_data in remote_server_data:
-                            p_id = p_data.get('id')
-                            if p_id is None:
-                                continue
-
-                            current_remote_ids.add(p_id)
-
-                            if p_id not in remote_players:
-                                print(f"[NETWORK] Player {p_id} ({p_data['team']}) joined.")
-                                npc_template = copy.deepcopy(SETTINGS.npc_types[0])
-                                sounds = ([x for x in SETTINGS.npc_soundpacks if x['name'] == npc_template['soundpack']][0])
+                            try:
+                                p_id = p_data.get('id')
+                                if p_id is None:
+                                    continue
                                 
-                                new_player_npc = NPC.Npc(npc_template, sounds, os.path.join(*npc_template['filepath']), team=p_data['team'])
-                                new_player_npc.remote_id = p_id
-                                remote_players[p_id] = new_player_npc
-                            
-                            player_npc = remote_players.get(p_id)
-                            if player_npc:
-                                player_npc.rect.centerx = p_data['x']
-                                player_npc.rect.centery = p_data['y']
-                                player_npc.angle = p_data['angle']
-                                player_npc.health = p_data['health']
-                                player_npc.state = 'idle' 
+                                # Skip ourselves - we control our player locally
+                                if hasattr(SETTINGS, 'my_id') and p_id == SETTINGS.my_id:
+                                    continue
+
+                                current_remote_ids.add(p_id)
+
+                                if p_id not in remote_players:
+                                    # Player is not in our list, check if they are alive before adding
+                                    if not p_data.get('alive', True):
+                                        continue # Don't add dead players
+
+                                    # Convert team number (0/1) to team name (green/orange)
+                                    team_num = p_data.get('team', 0)
+                                    team_name = "green" if team_num == 0 else "orange"
+                                    print(f"[NETWORK] Player {p_id} ({team_name}) joined.")
+                                    
+                                    npc_template = copy.deepcopy(SETTINGS.npc_types[0])
+                                    sounds = ([x for x in SETTINGS.npc_soundpacks if x['name'] == npc_template['soundpack']][0])
+                                    
+                                    new_player_npc = NPC.Npc(npc_template, sounds, os.path.join(*npc_template['filepath']), team=team_name)
+                                    new_player_npc.remote_id = p_id
+                                    new_player_npc.is_remote_player = True # Flag as remote player
+                                    remote_players[p_id] = new_player_npc
+                                
+                                player_npc = remote_players.get(p_id)
+                                if player_npc:
+                                    # Always update health from server
+                                    player_npc.health = p_data.get('health', 100)
+
+                                    # If the NPC is in the dying animation, don't update its position/state
+                                    if player_npc.state == 'dying' or player_npc.dead:
+                                        continue
+
+                                    # Update position
+                                    new_x = p_data.get('x', 0)
+                                    new_y = p_data.get('y', 0)
+                                    
+                                    # Detect respawn (teleportation)
+                                    dx = abs(new_x - player_npc.rect.centerx)
+                                    dy = abs(new_y - player_npc.rect.centery)
+                                    if dx > 500 or dy > 500:
+                                        #This is a respawn, so reset state
+                                        player_npc.state = 'idle'
+                                        player_npc.dead = False
+                                        player_npc.hurting = False
+                                        print(f"[NETWORK] Player {p_id} respawned")
+                                    
+                                    player_npc.rect.centerx = new_x
+                                    player_npc.rect.centery = new_y
+                                    player_npc.angle = p_data.get('angle', 0)
+                                    
+                                    # Set state based on shooting
+                                    is_shooting = p_data.get('is_shooting', False)
+                                    if is_shooting:
+                                        # Use 'attacking' state to trigger animation via think()
+                                        player_npc.state = 'attacking'
+                                    else:
+                                        # Only reset to idle if the current state was attacking
+                                        if player_npc.state == 'attacking':
+                                            player_npc.state = 'idle'
+                                    
+                                    # Check if this player hit me
+                                    hits = p_data.get('hits', [])
+                                    if hasattr(SETTINGS, 'my_id') and SETTINGS.my_id in hits:
+                                        print(f"[COMBAT] ⚡ Player {p_id} HIT ME! ⚡")
+                            except Exception as e:
+                                print(f"[NETWORK] Error processing player {p_data.get('id', '?')}: {e}")
+
+                        # After processing, remove NPCs whose death animation has finished
+                        dead_npc_ids = [p_id for p_id, npc in remote_players.items() if npc.dead]
+                        for p_id in dead_npc_ids:
+                            # Make sure they haven't already respawned in the same frame
+                            is_still_dead = True
+                            if remote_server_data:
+                                for p_data in remote_server_data:
+                                    if p_data.get('id') == p_id and p_data.get('alive', True):
+                                        is_still_dead = False
+                                        break
+                            if is_still_dead:
+                                print(f"[NETWORK] Player {p_id} death animation finished - removing from render")
+                                del remote_players[p_id]
 
                         disconnected_ids = set(remote_players.keys()) - current_remote_ids
                         for p_id in disconnected_ids:
-                            print(f"[NETWORK] Player {p_id} left.")
-                            if p_id in remote_players:
-                                del remote_players[p_id]
+                            # Don't re-print if we just removed them for being dead
+                            if p_id not in dead_npc_ids:
+                                print(f"[NETWORK] Player {p_id} left.")
+                                if p_id in remote_players:
+                                    del remote_players[p_id]
 
                         SETTINGS.npc_list = list(remote_players.values())
                 
                 # Check if we got disconnected
                 if SETTINGS.is_multiplayer and gameNetwork and not gameNetwork.connected:
                     print("[LASER TAG] Lost connection to server, returning to menu...")
+                    
+                    # RESET SCORES ON DISCONNECT
+                    if hasattr(SETTINGS, 'team_kills'):
+                        delattr(SETTINGS, 'team_kills')
+                    SETTINGS.team_kills = {'green': 0, 'orange': 0}
+                    print(f"[LASER TAG] Disconnect - scores reset to 0-0")
+                    
                     SETTINGS.menu_showing = True
                     menuController.current_menu = 'main'
                     game_started = False
